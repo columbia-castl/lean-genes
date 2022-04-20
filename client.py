@@ -1,0 +1,156 @@
+#client.py
+import os
+import requests
+import random
+import hashlib
+import csv 
+import math
+
+ref_bases = 100
+read_size = 2
+seed_size = 2
+ref_indices = [i for i in range(ref_bases - read_size + 1)] 
+ref = ""
+hashed_ref = []
+seed_pointer_table = []
+seed_locs = []
+reads = []
+
+DSOFT_BINS = 10
+BIN_THRESHOLD = 5
+
+def permute_indices():
+    #Fisher-Yates
+    for i in range(len(ref_indices)-1, 0, -1):
+        j = random.randint(0, i+1)
+        ref_indices[i], ref_indices[j] = ref_indices[j], ref_indices[i]
+
+def load_ref(refname):
+    ref_filename = refname + ".txt"
+    return open(ref_filename, "r").read()
+
+def load_ptable(refname):
+    ptable_filename = refname + "_spt.txt"
+    table_file = open(ptable_filename, "r")
+    for i in range (int(4**seed_size)):
+        seed_pointer_table.append(int(table_file.readline()))
+
+def load_plocs(refname):
+    loc_filename = refname + "_loc.txt"
+    loc_file = open(loc_filename, "r")
+    for i in range(ref_bases - read_size + 1):
+        seed_locs.append(int(loc_file.readline()))
+
+def hash_ref():
+    for i in range(ref_bases - read_size + 1):
+        hashed_ref.append(hashlib.sha384(ref[i : i + read_size].encode()))
+
+def load_reads(readfile):
+    read_file = open(readfile, 'r')
+    csv_read = csv.reader(read_file)
+    for row in csv_read:
+        for read in row:
+            reads.append(read)
+
+def seed_lookup(seed):
+    last_index = int(4**seed_size) - 1
+    ptable_index = 0
+    for i in range(len(seed)):
+        ptable_index = ptable_index << 2
+        if seed[i] == 'A':
+            pass
+        elif seed[i] == 'C':
+            ptable_index += 1
+        elif seed[i] == 'G':
+            ptable_index += 2
+        elif seed[i] == 'T':
+            ptable_index += 3
+        else:
+            print("Problem processing a seed when doing lookup")
+    print("index calculated = " + str(ptable_index))
+
+    start_loc = seed_pointer_table[ptable_index]
+    end_loc = -1
+
+    if start_loc == -1:
+        return -1
+    elif ptable_index == last_index:
+        end_loc = ref_bases - seed_size + 1
+    else:
+        next_index = ptable_index + 1
+        while (seed_pointer_table[next_index] == -1 and next_index < last_index):
+            next_index+=1
+        if (seed_pointer_table[next_index] == -1):
+            end_loc = ref_bases - seed_size
+        else:
+            end_loc = seed_pointer_table[next_index]
+
+    print("start loc: " + str(start_loc))
+    print("end loc: " + str(end_loc))
+    
+    locs = []
+    for i in range(end_loc - start_loc):
+        locs.append(seed_locs[start_loc + i])
+
+    return locs
+
+def dsoft(read):
+    candidates = []
+    last_hit_pos = [-1 * seed_size] * DSOFT_BINS
+    bp_count = [0] * DSOFT_BINS
+
+    for i in range(read_size - seed_size + 1):
+        seed = read[i:i+seed_size]
+        locs = seed_lookup(seed)
+        if locs != -1:
+            for loc in locs:
+                bin = math.ceil((loc - i) / DSOFT_BINS)
+                overlap = max(0, last_hit_pos[bin] + seed_size - i)
+                last_hit_pos[bin] = i
+                bp_count[bin] += seed_size - i
+                if ((BIN_THRESHOLD + seed_size - overlap) > bp_count(bin)) and (bp_count[bin] >= BIN_THRESHOLD):
+                    candidates.append((loc, i))
+        else:
+            return -1
+
+    return candidates
+
+def send_hashes():
+    for i in range(len(hashed_ref)):
+        resp = requests.put('http://127.0.0.1:4567', data = hashed_ref[ref_indices[i]].hexdigest())
+        print(resp)
+    return resp
+
+def get_match(index):
+    resp = requests.get('http://127.0.0.1:4567' + '?key=' + str(index))
+    print(resp.text)
+
+if __name__ == "__main__":
+    #os.environ["SECRET_URL"] = "http://127.0.0.1:4567"
+    #get_secret_message()
+
+    permute_indices()
+    #print(ref_indices)
+
+    ref = load_ref("ref1")
+    #print(ref)
+
+    hash_ref()
+    print(str(len(hashed_ref)) + " hashes stored from ref")
+
+    load_ptable("ref1")
+    print("seed pointer table loaded")
+    #print(seed_pointer_table)
+
+    load_plocs("ref1")
+    print("seed locs loaded")
+    #print(seed_locs)
+
+    load_reads("reads.csv")
+    print("reads loaded")
+    
+    dsoft("AA")
+
+    get_match(90)
+    #send_hashes()
+    get_match(1)
