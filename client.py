@@ -116,14 +116,24 @@ def dsoft(read):
     return candidates
 
 def send_hashes():
+    resp = requests.put('http://127.0.0.1:4567' + "?num_hashes=" + str(len(hashed_ref)))
     for i in range(len(hashed_ref)):
         resp = requests.put('http://127.0.0.1:4567', data = hashed_ref[ref_indices[i]].hexdigest())
         print(resp)
     return resp
 
 def get_match(index):
+    print("getting this hash: " + hashed_ref[ref_indices[index]].hexdigest())
     resp = requests.get('http://127.0.0.1:4567' + '?key=' + str(index))
     print(resp.text)
+
+def query_cloud(hash, locs):
+    loc_string = ""
+    for loc in locs[:-1]:
+        loc_string = loc_string + str(loc) + ","
+    loc_string = loc_string + str(locs[-1]) + "&hash="
+    loc_string += hash
+    resp = requests.get('http://127.0.0.1:4567' + '?locs=' + loc_string)
 
 if __name__ == "__main__":
     #os.environ["SECRET_URL"] = "http://127.0.0.1:4567"
@@ -151,6 +161,6 @@ if __name__ == "__main__":
     
     dsoft("AA")
 
-    get_match(90)
-    #send_hashes()
-    get_match(1)
+    send_hashes()
+    query_cloud(hashed_ref[ref_indices[1]].hexdigest(),[1])
+    #get_match(1)
