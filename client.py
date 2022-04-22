@@ -16,6 +16,8 @@ seed_pointer_table = []
 seed_locs = []
 reads = []
 
+CONNECT_AT = "http://3.91.218.191"
+
 DSOFT_BINS = 10
 BIN_THRESHOLD = 5
 
@@ -116,15 +118,15 @@ def dsoft(read):
     return candidates
 
 def send_hashes():
-    resp = requests.put('http://127.0.0.1:4567' + "?num_hashes=" + str(len(hashed_ref)))
+    resp = requests.put(CONNECT_AT + "?num_hashes=" + str(len(hashed_ref)))
     for i in range(len(hashed_ref)):
-        resp = requests.put('http://127.0.0.1:4567', data = hashed_ref[ref_indices[i]].hexdigest())
+        resp = requests.put(CONNECT_AT, data = hashed_ref[ref_indices[i]].hexdigest())
         print(resp)
     return resp
 
 def get_match(index):
     print("getting this hash: " + hashed_ref[ref_indices[index]].hexdigest())
-    resp = requests.get('http://127.0.0.1:4567' + '?key=' + str(index))
+    resp = requests.get(CONNECT_AT + '?key=' + str(index))
     print(resp.text)
 
 def query_cloud(hash, locs):
@@ -133,7 +135,7 @@ def query_cloud(hash, locs):
         loc_string = loc_string + str(loc) + ","
     loc_string = loc_string + str(locs[-1]) + "&hash="
     loc_string += hash
-    resp = requests.get('http://127.0.0.1:4567' + '?locs=' + loc_string)
+    resp = requests.get(CONNECT_AT + '?locs=' + loc_string)
 
 if __name__ == "__main__":
     #os.environ["SECRET_URL"] = "http://127.0.0.1:4567"
