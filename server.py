@@ -54,4 +54,4 @@ def hash_store():
                 return hashes[int(key)]
 
 
-app.run('127.0.0.1', port=4567)
+app.run(port=80)
