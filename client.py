@@ -6,7 +6,7 @@ import hashlib
 import csv 
 import math
 
-ref_bases = 100
+ref_bases = 230464284
 read_size = 2
 seed_size = 2
 ref_indices = [i for i in range(ref_bases - read_size + 1)] 
@@ -48,7 +48,7 @@ def load_plocs(refname):
 
 def hash_ref():
     for i in range(ref_bases - read_size + 1):
-        hashed_ref.append(hashlib.sha384(ref[i : i + read_size].encode()))
+        hashed_ref.append(hashlib.sha3_256(ref[i : i + read_size].encode()))
 
 def load_reads(readfile):
     read_file = open(readfile, 'r')
@@ -152,7 +152,9 @@ def process_ref():
     scanbuffer = ""
 
     testfile_str = "chr_text.txt"
-    testfile = open(testfile_str, 'w')
+    #testfile = open(testfile_str, 'w')
+
+    resp = requests.put(CONNECT_AT + "?num_hashes=" + str(ref_bases))
 
     while True:
         nextline = ref_file.readline()
@@ -167,28 +169,29 @@ def process_ref():
             while len(scanbuffer) >= READ_LENGTH:
                 hash_window = scanbuffer[0:READ_LENGTH]
                 if not 'n' in hash_window:
-                    testfile.write(hash_window + "\n")
+                    #testfile.write(hash_window + "\n")
+                    resp = requests.put(CONNECT_AT, data = hashlib.sha3_256(hash_window.encode()).digest())
                 scanbuffer = scanbuffer[1:]
 
-    testfile.close()
+    #testfile.close()
     ref_file.close()
     print("ref scanned successfully")
 
 if __name__ == "__main__":
-    permute_indices()
+    #permute_indices()
     #print(ref_indices)
 
-    ref = load_ref("ref1")
+    #ref = load_ref("ref1")
     #print(ref)
 
-    hash_ref()
+    #hash_ref()
     #print(str(len(hashed_ref)) + " hashes stored from ref")
 
-    load_ptable("ref1")
+    #load_ptable("ref1")
     #print("seed pointer table loaded")
     #print(seed_pointer_table)
 
-    load_plocs("ref1")
+    #load_plocs("ref1")
     #print("seed locs loaded")
     #print(seed_locs)
 
@@ -197,8 +200,8 @@ if __name__ == "__main__":
     
     #dsoft("AA")
 
-    send_hashes()
+    #send_hashes()
     #query_cloud(hashed_ref[ref_indices[1]].hexdigest(),[1])
     #get_match(1)
 
-    #process_ref()
+    process_ref()

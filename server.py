@@ -25,7 +25,9 @@ def hash_store():
         elif len(hashes) < hashnum:
             #hashes.append(str(request.get_data().decode()))
             dna_shelves[0][str(in_shelf)] = request.get_data()
-            print("received hash." + str(in_shelf))
+            if (in_shelf % 10000 == 0):
+                print("Received " + str(in_shelf) + " hashes")
+            #print("received hash " + str(in_shelf))
             in_shelf += 1
             return str(in_shelf)
         else:
