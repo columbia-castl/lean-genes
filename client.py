@@ -16,7 +16,10 @@ seed_pointer_table = []
 seed_locs = []
 reads = []
 
-CONNECT_AT = "http://3.91.218.191"
+CONNECT_AT = "http://127.0.0.1:4567"
+
+REF_NAME = "GRCh38.primary_assembly.genome.fa"
+READ_LENGTH = 150
 
 DSOFT_BINS = 10
 BIN_THRESHOLD = 5
@@ -137,10 +140,41 @@ def query_cloud(hash, locs):
     loc_string += hash
     resp = requests.get(CONNECT_AT + '?locs=' + loc_string)
 
-if __name__ == "__main__":
-    #os.environ["SECRET_URL"] = "http://127.0.0.1:4567"
-    #get_secret_message()
+def process_ref():
+    ref_file = open(REF_NAME, "r")
+    
+    # chr_list = [str(i+1) for i in range(22)]
+    # chr_list.append('X')
+    # chr_list.append('Y')
+    chr_list = ['1']
+    
+    doing_chromosome = False
+    scanbuffer = ""
 
+    testfile_str = "chr_text.txt"
+    testfile = open(testfile_str, 'w')
+
+    while True:
+        nextline = ref_file.readline()
+        if (nextline[0:4] == '>chr'):
+            if len (chr_list) == 0:
+                break
+            elif (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
+                print('at chromosome ' + chr_list[0])
+                chr_list.pop(0)
+        else:
+            scanbuffer += nextline[:-1].lower()
+            while len(scanbuffer) >= READ_LENGTH:
+                hash_window = scanbuffer[0:READ_LENGTH]
+                if not 'n' in hash_window:
+                    testfile.write(hash_window + "\n")
+                scanbuffer = scanbuffer[1:]
+
+    testfile.close()
+    ref_file.close()
+    print("ref scanned successfully")
+
+if __name__ == "__main__":
     permute_indices()
     #print(ref_indices)
 
@@ -148,21 +182,23 @@ if __name__ == "__main__":
     #print(ref)
 
     hash_ref()
-    print(str(len(hashed_ref)) + " hashes stored from ref")
+    #print(str(len(hashed_ref)) + " hashes stored from ref")
 
     load_ptable("ref1")
-    print("seed pointer table loaded")
+    #print("seed pointer table loaded")
     #print(seed_pointer_table)
 
     load_plocs("ref1")
-    print("seed locs loaded")
+    #print("seed locs loaded")
     #print(seed_locs)
 
-    load_reads("reads.csv")
-    print("reads loaded")
+    #load_reads("reads.csv")
+    #print("reads loaded")
     
-    dsoft("AA")
+    #dsoft("AA")
 
     send_hashes()
-    query_cloud(hashed_ref[ref_indices[1]].hexdigest(),[1])
+    #query_cloud(hashed_ref[ref_indices[1]].hexdigest(),[1])
     #get_match(1)
+
+    #process_ref()

@@ -1,10 +1,11 @@
-refname = "GRCh38_latest_genomic.fna"
+refname = "GRCh38.primary_assembly.genome.fa"
 
 def main():
     ref_file = open(refname, "r")
     for line in ref_file.readlines():
         if line[0] == ">":
             print(line)
+
 
 if __name__ == "__main__":
     main()
