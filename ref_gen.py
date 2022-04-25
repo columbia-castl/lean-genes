@@ -76,34 +76,61 @@ def construct_fa_tables(ref_name, kmer):
     all_kmers = [''.join(k) for k in itertools.product(bases, repeat=kmer)]
     print('Created list of all kmers')
 
-    #initialize lists that tables will be constructed into
-    seed_pointers = []
-    seed_locations = []
+    #chr_list = [str(i+1) for i in range(22)]
+    #chr_list.append('X')
+    #chr_list.append('Y')
 
-    chr_list = [str(i+1) for i in range(22)]
-    chr_list.append('X')
-    chr_list.append('Y')
-
-    scanbuffer = ""
+    chr_list = ['1']
 
     seed_dict = {}
-
     for seed in all_kmers:
         seed_dict[seed] = []
-
     print('Initialized seed dict')
+
+    scanbuffer = ""
     loc = 0
+    last_chr = ""
+
+    chr_line_counter = 0
 
     #search through reference for every possible kmer to make pointer and location tables
     while True:
         nextline = ref_file.readline()
+        chr_line_counter += 1
         if (nextline[0:4] == '>chr'):
-            if len(chr_list) == 0:
+
+            if len(last_chr) > 0:
+                #write pointer and location table to .txt
+                print("chr " + last_chr + ": " + str(chr_line_counter) + " lines")
+                chr_line_counter = 0
+                pointer_file = open("filter_tables/" + ref_name + "_spt_chr" + last_chr + "_" + str(kmer) + ".txt", "w")
+                loc_file = open("filter_tables/" + ref_name + "_loc_chr" + last_chr + "_" + str(kmer) + ".txt", "w") 
+
+                curr_seed_pt = 0
+                for seed in all_kmers:
+                    if (len(seed_dict[seed]) == 0):
+                        pointer_file.write("-1\n")
+                    else:
+                        pointer_file.write(str(curr_seed_pt) + "\n")    
+                        for loc in seed_dict[seed]:
+                            loc_file.write(str(loc) + "\n")
+                        curr_seed_pt += len(seed_dict[seed])
+                    seed_dict[seed] = []
+
+                pointer_file.close()
+                loc_file.close()
+
+                scanbuffer = ""
+
+            if len(chr_list) > 0:
+                if (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
+                    print('at chromosome ' + chr_list[0])
+
+            if len(chr_list) > 0:
+                last_chr = chr_list.pop(0)
+            else:
                 break
-            elif (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
-                print('at chromosome ' + chr_list[0])
-                chr_list.pop(0)
-                scanbuffer.clear()
+        
         else:
             scanbuffer += nextline[:-1].upper()
             while len(scanbuffer) >= kmer:
@@ -113,25 +140,9 @@ def construct_fa_tables(ref_name, kmer):
                     #print(seed_window)
                     seed_dict[seed_window].append(loc)
                     loc += 1
+                    if (loc % 20000000) == 0:
+                        print("\t" + str(loc) + " locs")
                 scanbuffer = scanbuffer[1:]
-
-
-    #write pointer and location table to .txt
-    pointer_file = open(ref_name + "_spt.txt", "w")
-    loc_file = open(ref_name + "_loc.txt", "w") 
-
-    curr_seed_pt = 0
-    for seed in all_kmers:
-        if (len(seed_dict[seed]) == 0):
-            pointer_file.write("-1\n")
-        else:
-            pointer_file.write(str(curr_seed_pt) + "\n")    
-            for loc in seed_dict[seed]:
-                loc_file.write(str(loc) + "\n")
-            curr_seed_pt += len(seed_dict[seed])
-
-    pointer_file.close()
-    loc_file.close()
 
 def main():
     if len(sys.argv) != 4:
