@@ -28,7 +28,7 @@ def hash_store():
             #print(request.json())
             for hash in request.json:
                 dna_shelves[0][str(in_shelf)] = hash
-            if (in_shelf % 10000 == 0):
+            if (in_shelf % 10000000 == 0):
                 print("Received " + str(in_shelf) + " hashes")
             #print("received hash " + str(in_shelf))
             in_shelf += len(request.json)
@@ -69,4 +69,4 @@ def hash_store():
 
 
 #app.run('0.0.0.0',port=80)
-serve(app, host='127.0.0.1', port=4567)
+serve(app, host='0.0.0.0', port=80)
