@@ -16,7 +16,7 @@ seed_pointer_table = []
 seed_locs = []
 reads = []
 
-CONNECT_AT = "http://127.0.0.1:4567"
+CONNECT_AT = "http://3.91.218.191"
 
 REF_NAME = "GRCh38.primary_assembly.genome.fa"
 READ_LENGTH = 150
@@ -157,7 +157,7 @@ def process_ref():
     resp = requests.put(CONNECT_AT + "?num_hashes=" + str(ref_bases))
 
     send_hashes = []
-    hash_per_packet = 1000
+    hash_per_packet = 10000000
     running_hash_count = 0
     early_stop = False
 
