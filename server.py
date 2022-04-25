@@ -25,11 +25,13 @@ def hash_store():
         #TODO: send seqnums with the hashes or something of that nature
         elif len(hashes) < hashnum:
             #hashes.append(str(request.get_data().decode()))
-            dna_shelves[0][str(in_shelf)] = request.get_data()
+            #print(request.json())
+            for hash in request.json:
+                dna_shelves[0][str(in_shelf)] = hash
             if (in_shelf % 10000 == 0):
                 print("Received " + str(in_shelf) + " hashes")
             #print("received hash " + str(in_shelf))
-            in_shelf += 1
+            in_shelf += len(request.json)
             return str(in_shelf)
         else:
             print("out of place PUT request")
@@ -67,4 +69,4 @@ def hash_store():
 
 
 #app.run('0.0.0.0',port=80)
-serve(app, host='0.0.0.0', port=80)
+serve(app, host='127.0.0.1', port=4567)

@@ -156,7 +156,14 @@ def process_ref():
 
     resp = requests.put(CONNECT_AT + "?num_hashes=" + str(ref_bases))
 
+    send_hashes = []
+    hash_per_packet = 1000
+    running_hash_count = 0
+    early_stop = False
+
     while True:
+        if early_stop:
+            break
         nextline = ref_file.readline()
         if (nextline[0:4] == '>chr'):
             if len (chr_list) == 0:
@@ -170,7 +177,17 @@ def process_ref():
                 hash_window = scanbuffer[0:READ_LENGTH]
                 if not 'n' in hash_window:
                     #testfile.write(hash_window + "\n")
-                    resp = requests.put(CONNECT_AT, data = hashlib.sha3_256(hash_window.encode()).digest())
+                    #resp = requests.put(CONNECT_AT, data = hashlib.sha3_256(hash_window.encode()).digest())
+                    send_hashes.append(hashlib.sha3_256(hash_window.encode()).hexdigest())
+                if (len(send_hashes) == hash_per_packet):
+                    resp = requests.put(CONNECT_AT, json=send_hashes)
+                    #early_stop = True
+                    if (resp.status_code == 200):
+                        send_hashes.clear()
+                        running_hash_count += hash_per_packet
+                    else:
+                        print("There was a problem sending hashes, " + str(running_hash_count) + " hashes sent")
+                        break
                 scanbuffer = scanbuffer[1:]
 
     #testfile.close()
