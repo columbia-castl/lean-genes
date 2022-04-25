@@ -1,4 +1,4 @@
-import random, sys
+import random, sys, itertools
 
 bases = ['A','C','G','T']
 
@@ -66,14 +66,6 @@ def construct_txt_tables(ref_name, kmer):
             loc_file.write(str(seed_locations[i]) + "\n")
     loc_file.close()
 
-def calc_seed_index(seed):
-    index = 0
-    while(len(seed) > 0):
-        index += bases.indexOf(seed[0])
-        seed = seed[1:]
-    return index
-
-
 def construct_fa_tables(ref_name, kmer):
         #Read the reference genome into a string
     ref_file = open(ref_name + ".fa", "r")
@@ -81,9 +73,8 @@ def construct_fa_tables(ref_name, kmer):
     #ref_file.close()
 
     #Generate all kmers for given seed size from parameter 'kmer'
-    all_kmers = []
-    for i in range(kmer):
-        all_kmers = generate_kmers(all_kmers)
+    all_kmers = [''.join(k) for k in itertools.product(bases, repeat=kmer)]
+    print('Created list of all kmers')
 
     #initialize lists that tables will be constructed into
     seed_pointers = []
@@ -100,6 +91,7 @@ def construct_fa_tables(ref_name, kmer):
     for seed in all_kmers:
         seed_dict[seed] = []
 
+    print('Initialized seed dict')
     loc = 0
 
     #search through reference for every possible kmer to make pointer and location tables
@@ -111,15 +103,17 @@ def construct_fa_tables(ref_name, kmer):
             elif (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
                 print('at chromosome ' + chr_list[0])
                 chr_list.pop(0)
-            else:
-                scanbuffer += nextline[:-1].upper()
-                while len(scanbuffer) >= kmer:
-                    seed_window = scanbuffer[0:kmer]
-                    if not 'N' in seed_window:
-                        seed_index = calc_seed_index(seed_window)
-                        seed_dict[seed_index].append(loc)
-                        loc += 1
-                    scanbuffer = scanbuffer[1:]
+                scanbuffer.clear()
+        else:
+            scanbuffer += nextline[:-1].upper()
+            while len(scanbuffer) >= kmer:
+                seed_window = scanbuffer[0:kmer]
+                if not 'N' in seed_window:
+                    #print(str(seed_index) + "\n")
+                    #print(seed_window)
+                    seed_dict[seed_window].append(loc)
+                    loc += 1
+                scanbuffer = scanbuffer[1:]
 
 
     #write pointer and location table to .txt
@@ -128,13 +122,13 @@ def construct_fa_tables(ref_name, kmer):
 
     curr_seed_pt = 0
     for seed in all_kmers:
-
-            if (len(seed_dict[seed]) > 0):
-                pointer_file.write("-1\n")
-            else:
-                pointer_file.write(str(curr_seed_pt) + "\n")    
-                loc_file.write(str(seed_locations[i]) + "\n")
-                curr_seed_pt += len(seed_dict[seed])
+        if (len(seed_dict[seed]) == 0):
+            pointer_file.write("-1\n")
+        else:
+            pointer_file.write(str(curr_seed_pt) + "\n")    
+            for loc in seed_dict[seed]:
+                loc_file.write(str(loc) + "\n")
+            curr_seed_pt += len(seed_dict[seed])
 
     pointer_file.close()
     loc_file.close()
@@ -147,6 +141,10 @@ def main():
     ref_length = int(sys.argv[1])
     ref_name = sys.argv[2]
     kmer = int(sys.argv[3])
+    
+    print("ref_length: " + str(ref_length))
+    print("ref_name: " + ref_name)
+    print("kmer: " + str(kmer))
 
     #generate_reference(ref_length, ref_name)
     #construct_txt_tables(ref_name, kmer)

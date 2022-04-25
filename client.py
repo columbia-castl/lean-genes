@@ -171,6 +171,7 @@ def process_ref():
             elif (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
                 print('at chromosome ' + chr_list[0])
                 chr_list.pop(0)
+                scanbuffer.clear()
         else:
             scanbuffer += nextline[:-1].lower()
             while len(scanbuffer) >= READ_LENGTH:
