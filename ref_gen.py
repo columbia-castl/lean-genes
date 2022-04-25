@@ -130,7 +130,7 @@ def construct_fa_tables(ref_name, kmer):
                 last_chr = chr_list.pop(0)
             else:
                 break
-        
+
         else:
             scanbuffer += nextline[:-1].upper()
             while len(scanbuffer) >= kmer:
