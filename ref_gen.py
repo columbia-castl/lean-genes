@@ -100,25 +100,24 @@ def construct_fa_tables(ref_name, kmer):
         if (nextline[0:4] == '>chr'):
 
             if len(last_chr) > 0:
-                #write pointer and location table to .txt
+                #write pointer and location table to .csv
                 print("chr " + last_chr + ": " + str(chr_line_counter) + " lines")
                 chr_line_counter = 0
-                pointer_file = open("filter_tables/" + ref_name + "_spt_chr" + last_chr + "_" + str(kmer) + ".txt", "w")
-                loc_file = open("filter_tables/" + ref_name + "_loc_chr" + last_chr + "_" + str(kmer) + ".txt", "w") 
+                filter_file = open("filter_tables/" + ref_name + "_chr" + last_chr + "_" + str(kmer) + ".csv", "w")
 
                 curr_seed_pt = 0
                 for seed in all_kmers:
                     if (len(seed_dict[seed]) == 0):
-                        pointer_file.write("-1\n")
+                        filter_file.write(seed + ",-1\n")
                     else:
-                        pointer_file.write(str(curr_seed_pt) + "\n")    
-                        for loc in seed_dict[seed]:
-                            loc_file.write(str(loc) + "\n")
+                        filter_file.write(seed + "," + str(len(seed_dict[seed])) + ",")    
+                        for loc in seed_dict[seed][:-1]:
+                            filter_file.write(str(loc) + ",")
+                        filter_file.write(str(seed_dict[seed][-1]) + "\n")
                         curr_seed_pt += len(seed_dict[seed])
                     seed_dict[seed] = []
 
-                pointer_file.close()
-                loc_file.close()
+                filter_file.close()
 
                 scanbuffer = ""
 
