@@ -1,6 +1,7 @@
 # server.py
 from flask import Flask, request
 import shelve
+from waitress import serve
 
 hashes = []
 app = Flask(__name__)
@@ -65,4 +66,5 @@ def hash_store():
                 return dna_shelves[0][key]
 
 
-app.run('127.0.0.1',port=4567)
+#app.run('0.0.0.0',port=80)
+serve(app, host='0.0.0.0', port=80)
