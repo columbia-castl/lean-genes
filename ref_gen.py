@@ -103,7 +103,7 @@ def construct_fa_tables(ref_name, kmer):
             elif (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
                 print('at chromosome ' + chr_list[0])
                 chr_list.pop(0)
-                scanbuffer.clear()
+                scanbuffer = ""
         else:
             scanbuffer += nextline[:-1].upper()
             while len(scanbuffer) >= kmer:
