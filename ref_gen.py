@@ -80,7 +80,7 @@ def construct_fa_tables(ref_name, kmer):
     #chr_list.append('X')
     #chr_list.append('Y')
 
-    chr_list = ['1']
+    chr_list = ['6']
 
     seed_dict = {}
     for seed in all_kmers:
@@ -135,7 +135,7 @@ def construct_fa_tables(ref_name, kmer):
                 if (len(chr_list) > 0):
                     last_chr = chr_list.pop(0)
 
-        else:
+        elif starting_list_chr:
             scanbuffer += nextline[:-1].upper()
             while len(scanbuffer) >= kmer:
                 seed_window = scanbuffer[0:kmer]
