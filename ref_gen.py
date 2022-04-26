@@ -93,13 +93,22 @@ def construct_fa_tables(ref_name, kmer):
 
     chr_line_counter = 0
 
+    starting_list_chr = False
+    finishing_list_chr = False
+
     #search through reference for every possible kmer to make pointer and location tables
     while True:
         nextline = ref_file.readline()
         chr_line_counter += 1
-        if (nextline[0:4] == '>chr'):
 
-            if len(last_chr) > 0:
+        if (nextline[0] == '>'):
+            finishing_list_chr = len(last_chr) > 0
+            if (len(chr_list) > 0):
+                starting_list_chr = nextline[0:(4 + len(chr_list[0]))] == ('>chr' + chr_list[0])
+            elif not finishing_list_chr:
+                break
+
+            if finishing_list_chr:
                 #write pointer and location table to .csv
                 print("chr " + last_chr + ": " + str(chr_line_counter) + " lines")
                 chr_line_counter = 0
@@ -118,17 +127,13 @@ def construct_fa_tables(ref_name, kmer):
                     seed_dict[seed] = []
 
                 filter_file.close()
-
+                last_chr = ""
                 scanbuffer = ""
 
-            if len(chr_list) > 0:
-                if (nextline[0:(4 + len(chr_list[0]))]) == ('>chr' + chr_list[0]):
-                    print('at chromosome ' + chr_list[0])
-
-            if len(chr_list) > 0:
-                last_chr = chr_list.pop(0)
-            else:
-                break
+            if starting_list_chr:
+                print('at chromosome ' + chr_list[0])
+                if (len(chr_list) > 0):
+                    last_chr = chr_list.pop(0)
 
         else:
             scanbuffer += nextline[:-1].upper()
