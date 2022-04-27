@@ -5,7 +5,8 @@ from waitress import serve
 
 hashes = []
 app = Flask(__name__)
-hashnum_provided = False
+accepting_hashes = False
+done_hashing = False
 hashnum = 0
 
 dna_shelves = []
@@ -14,18 +15,31 @@ in_shelf = 0
 
 @app.route("/", methods = ['GET', 'PUT'])
 def hash_store():
-    global hashnum, hashnum_provided, hashes, in_shelf
+    global hashnum, accepting_hashes, hashes, in_shelf, done_hashing
     if request.method == 'PUT':
-        if not hashnum_provided:
-            hashnum = int(request.args['num_hashes'])
-            hashnum_provided = True
-            for i in range(num_shelves):
-                dna_shelves.append(shelve.open('s' + str(i)))
-            return "Hashnum provided."
+        if not accepting_hashes:
+            initiate = request.args['initiate_hashes']
+            if initiate != None:
+                accepting_hashes = True
+                for i in range(num_shelves):
+                    dna_shelves.append(shelve.open('s' + str(i)))
+            if (accepting_hashes):
+                print("Initiating hashing")
+                return "Initiating hashing."
+            elif done_hashing:
+                print("Done hashing.")
+                return "Done hashing."
+            else:
+                return "Hashing not initiated"
         #TODO: send seqnums with the hashes or something of that nature
-        elif len(hashes) < hashnum:
-            #hashes.append(str(request.get_data().decode()))
-            #print(request.json())
+        else:
+            stop = request.args['stop_hashing']
+            if stop != None:
+                accepting_hashes = False
+                done_hashing = True
+                for shelf in dna_shelves:
+                    shelf.close()
+                return "Done hashing."
             for hash in request.json:
                 dna_shelves[0][str(in_shelf)] = hash
             if (in_shelf % 10000000 == 0):
@@ -33,9 +47,6 @@ def hash_store():
             #print("received hash " + str(in_shelf))
             in_shelf += len(request.json)
             return str(in_shelf)
-        else:
-            print("out of place PUT request")
-            return "All hashes received already."
     else:
         if (len(hashes) < hashnum) or (not hashnum_provided):
             print("hashnum is " + str(hashnum))
@@ -68,5 +79,5 @@ def hash_store():
                 return dna_shelves[0][key]
 
 
-#app.run('0.0.0.0',port=80)
-serve(app, host='0.0.0.0', port=80)
+app.run('127.0.0.1',port=4567)
+#serve(app, host='127.0.0.1', port=4567)

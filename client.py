@@ -7,7 +7,7 @@ import csv
 import math
 
 ref_bases = 230464284
-read_size = 2
+read_size = 148
 seed_size = 2
 ref_indices = [i for i in range(ref_bases - read_size + 1)] 
 ref = ""
@@ -15,11 +15,14 @@ hashed_ref = []
 seed_pointer_table = []
 seed_locs = []
 reads = []
+chr_list = ['21']
 
-CONNECT_AT = "http://3.91.218.191"
+CONNECT_AT = "http://127.0.0.1:4567"
 
-REF_NAME = "GRCh38.primary_assembly.genome.fa"
-READ_LENGTH = 150
+REF_NAME = "chr21.fa"
+READ_LENGTH = 148
+
+FASTQ = "example.fastq"
 
 DSOFT_BINS = 10
 BIN_THRESHOLD = 5
@@ -141,12 +144,12 @@ def query_cloud(hash, locs):
     resp = requests.get(CONNECT_AT + '?locs=' + loc_string)
 
 def process_ref():
+    global chr_list
     ref_file = open(REF_NAME, "r")
     
     # chr_list = [str(i+1) for i in range(22)]
     # chr_list.append('X')
     # chr_list.append('Y')
-    chr_list = ['1']
     
     doing_chromosome = False
     scanbuffer = ""
@@ -154,7 +157,7 @@ def process_ref():
     testfile_str = "chr_text.txt"
     #testfile = open(testfile_str, 'w')
 
-    resp = requests.put(CONNECT_AT + "?num_hashes=" + str(ref_bases))
+    resp = requests.put(CONNECT_AT + "?initiate_hashes=1" )
 
     send_hashes = []
     hash_per_packet = 10000000
@@ -165,6 +168,8 @@ def process_ref():
         if early_stop:
             break
         nextline = ref_file.readline()
+        if nextline == "":
+            break
         if (nextline[0:4] == '>chr'):
             if len (chr_list) == 0:
                 break
@@ -173,10 +178,10 @@ def process_ref():
                 chr_list.pop(0)
                 scanbuffer = ""
         else:
-            scanbuffer += nextline[:-1].lower()
+            scanbuffer += nextline[:-1].upper()
             while len(scanbuffer) >= READ_LENGTH:
                 hash_window = scanbuffer[0:READ_LENGTH]
-                if not 'n' in hash_window:
+                if not 'N' in hash_window:
                     #testfile.write(hash_window + "\n")
                     #resp = requests.put(CONNECT_AT, data = hashlib.sha3_256(hash_window.encode()).digest())
                     send_hashes.append(hashlib.sha3_256(hash_window.encode()).hexdigest())
@@ -186,14 +191,25 @@ def process_ref():
                     if (resp.status_code == 200):
                         send_hashes.clear()
                         running_hash_count += hash_per_packet
+                        print(str(running_hash_count) + " hashes")
                     else:
+                        print(resp)
                         print("There was a problem sending hashes, " + str(running_hash_count) + " hashes sent")
                         break
                 scanbuffer = scanbuffer[1:]
+    #If hashing windows didn't perfectly align to hash_per_packet!
+    if (len(send_hashes) > 0):
+        resp = requests.put(CONNECT_AT, json=send_hashes)
 
     #testfile.close()
     ref_file.close()
     print("ref scanned successfully")
+    resp = requests.put(CONNECT_AT + "?stop_hashing=1")
+
+def process_fastq():
+    fastq_file = open(FASTQ, 'r')
+    fastq_file.close()
+
 
 if __name__ == "__main__":
     #permute_indices()
