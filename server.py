@@ -3,19 +3,20 @@ from flask import Flask, request
 import shelve
 from waitress import serve
 
-hashes = []
 app = Flask(__name__)
 accepting_hashes = False
 done_hashing = False
+begin_align = False
+end_align = False
 hashnum = 0
 
 dna_shelves = []
-num_shelves = 24
+num_shelves = 1
 in_shelf = 0
 
 @app.route("/", methods = ['GET', 'PUT'])
 def hash_store():
-    global hashnum, accepting_hashes, hashes, in_shelf, done_hashing
+    global hashnum, accepting_hashes, in_shelf, done_hashing, end_align, begin_align
     if request.method == 'PUT':
         if not accepting_hashes:
             initiate = request.args.get('initiate_hashes')
@@ -42,27 +43,30 @@ def hash_store():
                 return "Done hashing."
             for hash in request.json:
                 dna_shelves[0][str(in_shelf)] = hash
-            if (in_shelf % 10000000 == 0):
-                print("Received " + str(in_shelf) + " hashes")
+                in_shelf += 1
+                if (in_shelf % 10000000 == 0):
+                    print("Received " + str(in_shelf) + " hashes")
             #print("received hash " + str(in_shelf))
-            in_shelf += len(request.json)
             return str(in_shelf)
     else:
-        if (len(hashes) < hashnum) or (not hashnum_provided):
-            print("hashnum is " + str(hashnum))
-            print("len(hashes) is " + str(len(hashes)))
-            return str(hashnum - len(hashes)) + " hashes still needed. Sorry."
+        if accepting_hashes:
+            print("Received query while still processing ref.")
+            return "Still processing ref. Sorry."
         else:
-            if (request.args.get('locs') != None):
+            if (request.args.get('initiate_align') != None):
+                begin_align = True
+                for shelf in dna_shelves:
+                    shelf.open()
+            elif (request.args.get('locs') != None):
                 found_string = ""
                 loc_list = request.args.get('locs').split(",")
                 for loc in loc_list:
-                    #print("looking at loc " + loc)
+                    print("looking at loc " + loc)
                     #print(hashes[int(loc)] + " is stored hash")
                     #print(len(hashes[int(loc)]))
                     #print(str(request.args.get('hash')) + " is provided hash")
                     #print(len(str(request.args.get('hash'))))
-                    if hashes[int(loc)] == request.args.get('hash'):
+                    if dna_shelves[0][loc] == request.args.get('hash'):
                         found_string += str(loc) + ","
                 
                 #print(request.args.get('locs') + " is locs.")
@@ -73,10 +77,13 @@ def hash_store():
 
                 #print("returning: " + request.args.get('hash') + ": " + found_string)
                 return request.args.get('hash') + ": " + found_string
-
-            else:
-                key = request.args['key']
-                return dna_shelves[0][key]
+            elif (request.args.get('end_align') != None):
+                end_align = True
+                begin_align = False
+                for shelf in dna_shelves:
+                    shelf.close()
+            elif end_align and not begin_align:
+                return "Server inactive."
 
 
 app.run('127.0.0.1',port=4567)

@@ -1,4 +1,4 @@
-readfile = "U0a_CGATGT_L001_R1_001.fastq"
+readfile = "chr21.0.01.L150.100k.fastq"
 
 def main():
 	rfile = open(readfile, 'r')

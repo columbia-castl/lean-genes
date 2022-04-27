@@ -20,9 +20,8 @@ chr_list = ['21']
 CONNECT_AT = "http://127.0.0.1:4567"
 
 REF_NAME = "chr21.fa"
+READ_FILE = "chr21.0.01.L150.100k.fastq"
 READ_LENGTH = 148
-
-FASTQ = "example.fastq"
 
 DSOFT_BINS = 10
 BIN_THRESHOLD = 5
@@ -142,6 +141,7 @@ def query_cloud(hash, locs):
     loc_string = loc_string + str(locs[-1]) + "&hash="
     loc_string += hash
     resp = requests.get(CONNECT_AT + '?locs=' + loc_string)
+    return resp
 
 def process_ref():
     global chr_list
@@ -206,9 +206,18 @@ def process_ref():
     print("ref scanned successfully")
     resp = requests.put(CONNECT_AT + "?stop_hashing=1")
 
-def process_fastq():
-    fastq_file = open(FASTQ, 'r')
+def process_reads():
+    resp = requests.put(CONNECT_AT + "?initiate_align=1")
+    fastq_file = open(READ_FILE, 'r')
+    one_read = [next(fastq_file) for i in range(4)]
+    #while one_read[0] != "":
+    read = one_read[1][:-1]
+    readhash = hashlib.sha3_256(read.encode()).hexdigest()
+    resp = query_cloud(readhash, [0])
+    print(resp)
+    #print ("read processed: " + str(len(read)))
     fastq_file.close()
+    resp = requests.put(CONNECT_AT + "?end_align=1")
 
 
 if __name__ == "__main__":
@@ -232,10 +241,12 @@ if __name__ == "__main__":
     #load_reads("reads.csv")
     #print("reads loaded")
     
+    process_ref()
     #dsoft("AA")
+    process_reads()
 
     #send_hashes()
     #query_cloud(hashed_ref[ref_indices[1]].hexdigest(),[1])
     #get_match(1)
 
-    process_ref()
+
