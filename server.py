@@ -18,7 +18,7 @@ def hash_store():
     global hashnum, accepting_hashes, hashes, in_shelf, done_hashing
     if request.method == 'PUT':
         if not accepting_hashes:
-            initiate = request.args['initiate_hashes']
+            initiate = request.args.get('initiate_hashes')
             if initiate != None:
                 accepting_hashes = True
                 for i in range(num_shelves):
@@ -33,7 +33,7 @@ def hash_store():
                 return "Hashing not initiated"
         #TODO: send seqnums with the hashes or something of that nature
         else:
-            stop = request.args['stop_hashing']
+            stop = request.args.get('stop_hashing')
             if stop != None:
                 accepting_hashes = False
                 done_hashing = True
