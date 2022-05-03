@@ -1,7 +1,7 @@
 import hashlib, random, time
 
-num_hashes = 1000000
-num_samples = 10
+num_hashes = 10000000
+num_samples = 50
 
 linear_hash_array = [] 
 samples = []
@@ -47,6 +47,8 @@ def main():
     for i in range(num_samples):
         time = time_sample(i)
         times.append(time)
+
+    print("num hashes: " + str(num_hashes))
 
     for i in range(num_samples):
         print("index " + str(sample_indices[i]) + " --- " + str(times[i]) + " s")
