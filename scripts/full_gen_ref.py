@@ -36,7 +36,7 @@ def encrypt_ref():
     ref_file.close()
     return encrypted_ref 
 
-def sliding_window_table(encrypted_ref, read_size=100, hash_bits=10):
+def sliding_window_table(encrypted_ref, read_size=100, hash_bits=15):
     blocks_read = 0
     hashes_generated = 0
     hash_buffer = b''
@@ -76,9 +76,18 @@ def get_bucket_lens(hash_table, hash_bits):
 
 
 def main():
+    hash_bits = 17
+
     encrypted_ref = encrypt_ref()
-    hash_table = sliding_window_table(encrypted_ref)
-    bucket_lens = get_bucket_lens()
+    hash_table = sliding_window_table(encrypted_ref, hash_bits=hash_bits)
+    bucket_lens = get_bucket_lens(hash_table, hash_bits)
+   
+    plt.plot(bucket_lens)
+    plt.title("Bucket distribution with " + str(2**hash_bits) + " buckets")
+    plt.xlabel("Bucket index")
+    plt.ylabel("Hashes in bucket")
+    plt.grid()
+    plt.savefig("bucket_data/buckets_" + str(2**hash_bits) + ".png")
 
 if __name__ == "__main__":
     main()
