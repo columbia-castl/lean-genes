@@ -2,8 +2,10 @@ import hashlib
 import base64
 import matplotlib.pyplot as plt
 import sys
+import time
 
 from Crypto.Random import get_random_bytes 
+from Crypto.Random import random
 from Crypto.Cipher import AES
 
 def encrypt_ref():
@@ -73,10 +75,33 @@ def get_bucket_lens(hash_table, hash_bits):
         bucket_lens.append(len(hash_table[i]))
     return bucket_lens
 
+def bucket_time_tests(num_trials, hash_table, hash_bits=15):
+    time_vector = []
+    indices = []
 
+    for i in range(num_trials):
+        bucket = random.randint(0, 2**hash_bits-1)
+        index = random.randint(0, len(hash_table[bucket])-1)
+        rand_hash = hash_table[bucket][index]
+        found = False
+        ind = 0
+
+        time1 = time.time()
+        while not found:
+            if hash_table[bucket][ind] != rand_hash:
+                ind += 1
+            else:
+                found = True
+            if ind > len(hash_table[bucket]):
+                print("Error: didn't find hash sampled from bucket?!?")
+        time2 = time.time()
+        time_vector.append(time2-time1)
+        indices.append(index)
+    return indices, time_vector
 
 def main():
     hash_bits = 17
+    num_samples = 200
 
     encrypted_ref = encrypt_ref()
     hash_table = sliding_window_table(encrypted_ref, hash_bits=hash_bits)
@@ -88,6 +113,18 @@ def main():
     plt.ylabel("Hashes in bucket")
     plt.grid()
     plt.savefig("bucket_data/buckets_" + str(2**hash_bits) + ".png")
+
+    indices, times = bucket_time_tests(num_samples, hash_table, hash_bits)
+    print(times)
+
+    plt.clf()
+    plt.plot(indices, times)
+    plt.title("Hash access times given a hash table")
+    plt.xlabel("Index")
+    plt.ylabel("Time (s)")
+    plt.grid()
+    plt.savefig("bucket_data/access_times.png")
+
 
 if __name__ == "__main__":
     main()
