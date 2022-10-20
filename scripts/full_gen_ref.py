@@ -1,73 +1,113 @@
 import hashlib
+import hmac
 import base64
 import matplotlib.pyplot as plt
 import sys
 import time
+import re
 
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
 
-def encrypt_ref():
+ref_bytes = []
 
-    print("Begin encryption")
-    encrypted_ref = []
-    ref_file = open("chr21.fa", "rb")
+#Global params to help with debug and test
+debug = False
+limit_hashes = True
+hash_limit = 10
 
-    key = get_random_bytes(AES.block_size)
-    encrypter = AES.new(key, AES.MODE_GCM)
-    #decrypter = AES.new(key, AES.MODE_EAX, encrypter.nonce)
+def get_ref(ref_file_path):
+    print("\nRetrieve reference file at path " + ref_file_path)
+    ref_file = open(ref_file_path, "rb")
+    next(ref_file) #skip first line, i.e. >chr21   
+    ref_bytes = ref_file.read()
+    return ref_bytes
 
-    num_hashes = 0
-
-    #Create encrypted reference
-    while True: 
-        chunk = ref_file.read(AES.block_size)
-        if not chunk:
-            break
-        encrypted_chunk = encrypter.encrypt(chunk)
-        encrypted_ref.append(encrypted_chunk)
-
-        num_hashes += 1
-        
-    print(num_hashes)
-    print("Theoretical size of encrypted ref = " + str(num_hashes * AES.block_size))
-    #print("Actual size of encrypted ref = " + str(sys.getsizeof(encrypted_ref[7])))
-    
-    print("End encryption")
-    ref_file.close()
-    return encrypted_ref 
-
-def sliding_window_table(encrypted_ref, read_size=100, hash_bits=15):
-    blocks_read = 0
+def sliding_window_table(key, ref_bytes, read_size=100, hash_bits=15):
+    bytes_read = 0
     hashes_generated = 0
     hash_buffer = b''
 
     hash_table = [[] for _ in range(2**hash_bits)]
-    
-    num_encrypted_blocks = len(encrypted_ref)
+    ref_coords = [[] for _ in range(2**hash_bits)]
+  
+    num_bytes = len(ref_bytes)
 
-    while (len(hash_buffer) < read_size):
+    while (len(hash_buffer) < read_size): 
 
-        if blocks_read < num_encrypted_blocks:
-            hash_buffer += encrypted_ref[blocks_read]
-            blocks_read += 1
+        if limit_hashes:
+            if hashes_generated > limit_hashes:
+                break
+
+        if bytes_read < num_bytes:
+            hash_buffer += ref_bytes[bytes_read:bytes_read + read_size]
+            bytes_read += read_size 
         else:
             break
 
-        if blocks_read % 100000 == 0:
-            print(blocks_read)
-            print(str(hashes_generated * 32) + " bytes generated from hashing")
-
         while (len(hash_buffer) >= read_size):
-            curr_hash = hashlib.sha3_256(hash_buffer).digest()
-            hash_table[int.from_bytes(curr_hash, 'big') % (2**hash_bits)].append(curr_hash)
+            if debug: 
+                print("Hashing window: ")
+                print(hash_buffer[0:read_size])
+            
+            newhash = hmac.new(key, hash_buffer[0:read_size], hashlib.sha256)
+            curr_hash = newhash.digest()
+            
+            if debug:
+                print(curr_hash)
+            table_index = int.from_bytes(curr_hash, 'big') % (2**hash_bits)
+            
+            if debug:            
+                print("Placing hash in bucket " + str(table_index))
+            bucket_index = len(hash_table[table_index]) 
+           
+            hash_table[table_index].append(curr_hash)
+            ref_coords[table_index].append(hashes_generated)
+            
             hashes_generated += 1
             hash_buffer = hash_buffer[1:]          
 
-    print(str(hashes_generated) + " hashes generated")
-    return hash_table
+    print(str(hashes_generated) + " hashes generated\n")
+    return hash_table, ref_coords
 
+
+def find_reads(key, hash_table, ref_coords, hash_bits, filename):
+   
+    print("\nProcessing reads from fastq: " + filename)
+    read_file = open(filename, "r")
+    read_count = 0
+    find_count = 0
+
+    while True:
+        get_line = read_file.readline()
+        if not get_line:
+            break
+        if re.search("A|C|G|T", get_line) != None:
+            read_count += 1
+            get_line_bytes = bytes(get_line[:-1], 'utf-8')
+            if debug: 
+                print(get_line_bytes) 
+            
+            newhash = hmac.new(key, bytes(get_line[:-1], 'utf-8'), hashlib.sha256) 
+            curr_hash = newhash.digest()
+            if debug:
+                print(curr_hash)
+            
+            table_index = int.from_bytes(curr_hash, 'big') % (2**hash_bits)
+            
+            if debug:
+                print("Looking in bucket " + str(table_index))
+            
+            for i in range(len(hash_table[table_index])):
+                if hash_table[table_index][i] == curr_hash:
+                    if debug: 
+                        print("HASH FOUND!")
+                        print("Ref loc = " + str(ref_coords[table_index][i]))
+                    find_count += 1
+                    break
+    print(str(read_count) + " reads processed.")
+    print(str((float(find_count)/float(read_count)) * 100) + "% of READS ALIGNED\n")
 
 def get_bucket_lens(hash_table, hash_bits):
     bucket_lens = []
@@ -99,14 +139,10 @@ def bucket_time_tests(num_trials, hash_table, hash_bits=15):
         indices.append(index)
     return indices, time_vector
 
-def main():
-    hash_bits = 17
-    num_samples = 200
-
-    encrypted_ref = encrypt_ref()
-    hash_table = sliding_window_table(encrypted_ref, hash_bits=hash_bits)
+def make_plots(hash_table, hash_bits, num_samples):
+  
     bucket_lens = get_bucket_lens(hash_table, hash_bits)
-   
+    
     plt.plot(bucket_lens)
     plt.title("Bucket distribution with " + str(2**hash_bits) + " buckets")
     plt.xlabel("Bucket index")
@@ -125,6 +161,25 @@ def main():
     plt.grid()
     plt.savefig("bucket_data/access_times.png")
 
+def main():
+    #Timing samples
+    num_samples = 200
+
+    #Parameters
+    hash_bits = 4
+    read_length = 20
+
+    #Files
+    fastq = "../test_data/small_test.fq"
+    fasta = "../test_data/chr21_preprocess.fa" 
+    
+    ref_bytes = get_ref(fasta)
+    key = get_random_bytes(32)    
+    hash_table, ref_coords = sliding_window_table(key, ref_bytes, read_length ,hash_bits)
+
+    #hash_table = [[] for _ in range(2**hash_bits)]
+    find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
+    #make_plots(hash_table, hash_bits, num_samples)
 
 if __name__ == "__main__":
     main()
