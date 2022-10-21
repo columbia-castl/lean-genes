@@ -14,7 +14,7 @@ ref_bytes = []
 
 #Global params to help with debug and test
 debug = False
-limit_hashes = True
+limit_hashes = False
 hash_limit = 10
 
 def get_ref(ref_file_path):
@@ -107,6 +107,7 @@ def find_reads(key, hash_table, ref_coords, hash_bits, filename):
                     find_count += 1
                     break
     print(str(read_count) + " reads processed.")
+    print(str(find_count) + "/" + str(read_count) + "READS ALIGNED")
     print(str((float(find_count)/float(read_count)) * 100) + "% of READS ALIGNED\n")
 
 def get_bucket_lens(hash_table, hash_bits):
@@ -166,19 +167,22 @@ def main():
     num_samples = 200
 
     #Parameters
-    hash_bits = 4
-    read_length = 20
+    hash_bits = 15
+    read_length = 151 #be sure this aligns with your fastq
 
     #Files
-    fastq = "../test_data/small_test.fq"
     fasta = "../test_data/chr21_preprocess.fa" 
-    
+    fastq = "../test_data/sim21.fastq"
+   
+    #Cloud-side operations   
     ref_bytes = get_ref(fasta)
     key = get_random_bytes(32)    
     hash_table, ref_coords = sliding_window_table(key, ref_bytes, read_length ,hash_bits)
 
-    #hash_table = [[] for _ in range(2**hash_bits)]
+    #Process reads from client side    
     find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
+    
+    #Performance measurements
     #make_plots(hash_table, hash_bits, num_samples)
 
 if __name__ == "__main__":
