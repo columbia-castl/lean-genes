@@ -10,18 +10,18 @@ from Crypto.Random import get_random_bytes
 from Crypto.Random import random
 from Crypto.Cipher import AES
 
-ref_list = []
-ref_loc = []
-
 #Global params to help with debug and test
 debug = False
 check_locations = True
 
-limit_hashes = True
+limit_hashes = False 
 hash_limit = 100
 
 limit_lines = False
 line_limit = 100
+
+#After x hashes print progress
+progress_indicator = 5000000
 
 def get_ref(ref_file_path):
     print("\nRetrieve reference file at path " + ref_file_path)
@@ -102,7 +102,10 @@ def sliding_window_table(key, ref_lines, read_size=100, hash_bits=15):
             if limit_hashes and (hashes_generated > hash_limit):
                 end_hashing = True
                 break
-        
+
+            if hashes_generated % progress_indicator == 0:
+                print(hashes_generated)
+
         lines_processed += 1
         
         if limit_lines and (lines_processed > line_limit):
@@ -122,6 +125,8 @@ def find_reads(key, hash_table, ref_coords, hash_bits, filename):
     read_file = open(filename, "r")
     read_count = 0
     find_count = 0
+
+    ref_loc = []
 
     while True:
         get_line = read_file.readline()
@@ -155,6 +160,8 @@ def find_reads(key, hash_table, ref_coords, hash_bits, filename):
     print(str(read_count) + " reads processed.")
     print(str(find_count) + "/" + str(read_count) + " READS ALIGNED")
     print(str((float(find_count)/float(read_count)) * 100) + "% of READS ALIGNED\n")
+
+    return ref_loc
 
 def get_bucket_lens(hash_table, hash_bits):
     bucket_lens = []
@@ -222,12 +229,11 @@ def main():
    
     #Cloud-side operations   
     processed_ref = get_ref(fasta)
-    
     key = get_random_bytes(32)    
     hash_table, ref_coords = sliding_window_table(key, processed_ref, read_length ,hash_bits)
 
     #Process reads from client side    
-    #find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
+    find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
     
     #Performance measurements
     #make_plots(hash_table, hash_bits, num_samples)
