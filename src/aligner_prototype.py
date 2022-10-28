@@ -224,7 +224,10 @@ def main():
     read_length = 151 #be sure this aligns with your fastq
 
     #Files
-    fasta = "../test_data/chr21.fa" 
+    if len(sys.argv) == 1:
+        fasta = "GRCh38_split1.fa" 
+    else:
+        fasta = sys.argv[1]
     fastq = "../test_data/samples.fq"
    
     #Cloud-side operations   
@@ -233,7 +236,7 @@ def main():
     hash_table, ref_coords = sliding_window_table(key, processed_ref, read_length ,hash_bits)
 
     #Process reads from client side    
-    find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
+    #find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
     
     #Performance measurements
     #make_plots(hash_table, hash_bits, num_samples)
