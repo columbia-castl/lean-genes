@@ -17,8 +17,9 @@ def generate_kmers(kmers):
 def generate_reference(ref_length, ref_name):
     ref = ''
     for i in range(ref_length):
-        ref += bases[random.randint(0, 3)]
-    ref_file = open(ref_name + ".txt", 'w')
+        ref += bases[random.randint(0, 3)]    
+    ref_file = open(ref_name + ".fa", 'w')
+    ref_file.write(">chr1\n")
     ref_file.write(ref + "\n")
     ref_file.close()
 
@@ -161,11 +162,11 @@ def main():
     print("ref_name: " + ref_name)
     print("kmer: " + str(kmer))
 
-    #generate_reference(ref_length, ref_name)
+    generate_reference(ref_length, ref_name)
     #construct_txt_tables(ref_name, kmer)
 
-    construct_fa_tables(ref_name, kmer)
-    print("Finished constructing tables!")
+    #construct_fa_tables(ref_name, kmer)
+    #print("Finished constructing tables!")
 
 if __name__ == "__main__":
     main()
