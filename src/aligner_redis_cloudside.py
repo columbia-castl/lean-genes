@@ -177,7 +177,9 @@ def main():
     fastq = "../test_data/samples.fq"
    
     #Cloud-side operations   
-    redis_table = redis.Redis(host='localhost', port=6379, db=0)
+    #TODO: DONT HARDCODE THESE PARAMETERS 
+    redis_table = redis.Redis(host='44.201.192.69', port=6379, db=0, password='lean-genes-17')
+
     processed_ref = get_ref(fasta)
     key = get_random_bytes(32)    
     sliding_window_table(key, processed_ref, redis_table, read_length)
