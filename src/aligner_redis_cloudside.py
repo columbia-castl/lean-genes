@@ -117,56 +117,8 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 
     return True 
 
-def find_reads(key, hash_table, ref_coords, hash_bits, filename):
-   
-    print("\nProcessing reads from fastq: " + filename)
-    read_file = open(filename, "r")
-    read_count = 0
-    find_count = 0
-
-    ref_loc = []
-
-    while True:
-        get_line = read_file.readline()
-        if not get_line:
-            break
-        if re.search("A|C|G|T", get_line) != None:
-            read_count += 1
-            get_line_bytes = bytes(get_line[:-1], 'utf-8')
-            if debug: 
-                print(get_line_bytes) 
-            
-            newhash = hmac.new(key, bytes(get_line[:-1], 'utf-8'), hashlib.sha256) 
-            curr_hash = newhash.digest()
-            if debug:
-                print(curr_hash)
-            
-            table_index = int.from_bytes(curr_hash, 'big') % (2**hash_bits)
-            
-            if debug:
-                print("Looking in bucket " + str(table_index))
-            
-            for i in range(len(hash_table[table_index])):
-                if hash_table[table_index][i] == curr_hash:
-                    if debug: 
-                        print("HASH FOUND!")
-                    if check_locations:
-                        print("Ref loc = " + str(ref_coords[table_index][i]))
-                    find_count += 1
-                    ref_loc.append(ref_coords[table_index][i])                    
-                    break
-    print(str(read_count) + " reads processed.")
-    print(str(find_count) + "/" + str(read_count) + " READS ALIGNED")
-    print(str((float(find_count)/float(read_count)) * 100) + "% of READS ALIGNED\n")
-
-    return ref_loc
-
 def main():
-    #Timing samples
-    num_samples = 200
-
     #Parameters
-    hash_bits = 15
     read_length = 15 #be sure this aligns with your fastq
 
     #Files
@@ -184,9 +136,6 @@ def main():
     key = get_random_bytes(32)    
     sliding_window_table(key, processed_ref, redis_table, read_length)
 
-    #Process reads from client side    
-    #find_reads(key, hash_table, ref_coords, hash_bits, fastq)  
-    
 if __name__ == "__main__":
     main()
 
