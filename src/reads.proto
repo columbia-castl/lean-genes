@@ -1,0 +1,10 @@
+syntax = "proto2";
+
+package lean_genes;
+
+message Read {
+	required bytes read = 1;
+	required bytes align_score = 2;
+	required bytes hash = 3;
+	optional int32 counter = 4;
+}
