@@ -19,9 +19,11 @@ class FastqState(Enum):
 
 PARSING_STATE = FastqState.READ_LABEL
 
+cipher_object = ""
 read_string = ""
+read_socket = ""
 
-def send_reads(key, filename="../test_data/samples.fq"):
+def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
     global PARSING_STATE
 
     print("\nProcessing reads from fastq: " + filename)
@@ -45,10 +47,8 @@ def send_reads(key, filename="../test_data/samples.fq"):
                 PARSING_STATE = FastqState.READ_CONTENT
 
         elif PARSING_STATE == FastqState.READ_CONTENT:
-
+            newread = Read()
             if re.search("A|C|G|T", get_line) != None:
-                #newread = reads_pb2.Read()
-
                 read_count += 1
                 get_line_bytes = bytes(get_line[:-1], 'utf-8')
                 read_string = get_line
@@ -56,11 +56,14 @@ def send_reads(key, filename="../test_data/samples.fq"):
                 if debug: 
                     print(get_line_bytes) 
                 
-                newhash = hmac.new(key, bytes(get_line[:-1], 'utf-8'), hashlib.sha256) 
+                newhash = hmac.new(hashkey, bytes(get_line[:-1], 'utf-8'), hashlib.sha256) 
                 curr_hash = newhash.digest()
                 
                 if debug:
                     print(curr_hash)
+            
+                newread.read = encrypter.encrypt(bytes(get_line[:-1], 'utf-8'))
+                newread.hash = curr_hash
 
                 PARSING_STATE = FastqState.DIV
 
@@ -80,20 +83,30 @@ def send_reads(key, filename="../test_data/samples.fq"):
                 printf("Error: fastq is not formatted correctly.")
 
             else:
+                newread.align_score = encrypter.encrypt(bytes(get_line[:-1], 'utf-8'))
+                serialized_read = newread.SerializeToString()
+                #socket.send(serialized_read)
                 PARSING_STATE = FastqState.READ_LABEL
 
         else:
             printf("Error: bad fastq parsing state!")
             exit(1)
+
     print(str(read_count) + " reads processed.")
 
     return ref_loc
 
 def main():
-    
-    key = get_random_bytes(32)
-    print("...")
-    send_reads(key)
+   
+    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    read_socket.bind(('127.0.0.1', 4444))
+
+    hashkey = get_random_bytes(32)
+    cipherkey = get_random_bytes(32)
+    cipher_object = AES.new(cipherkey, AES.MODE_CTR) 
+
+    print("Parsing fastq...")
+    send_reads(read_socket, cipher_object, hashkey)
 
 if __name__ == "__main__":
     main()
