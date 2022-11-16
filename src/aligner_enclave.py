@@ -118,23 +118,6 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 
     return True 
 
-def receive_reads(read_port, read_size):
-    #Use read size to calc expected bytes for a read
-    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    read_socket.bind(('127.0.0.1', read_port))
-    read_socket.listen()
-    conn, addr = read_socket.accept()
-    
-    read_counter = 0
-
-    while True:
-        data = conn.recv(read_size)
-        read_counter += 1
-        print("-->received data " + str(read_counter))
-        if not data:
-            break
-
-
 def main():
     #Parameters
     read_length = 15 #be sure this aligns with your fastq
@@ -144,7 +127,6 @@ def main():
         fasta = "../test_data/small_ref.fa" 
     else:
         fasta = sys.argv[1]
-    fastq = "../test_data/samples.fq"
    
     #Cloud-side operations   
     #TODO: DONT HARDCODE THESE PARAMETERS 
@@ -154,9 +136,6 @@ def main():
     processed_ref = get_ref(fasta)
     key = get_random_bytes(32)    
     sliding_window_table(key, processed_ref, redis_table, read_length)
-
-    #Wait to process reads from client
-    receive_reads(4444, read_length)
 
 if __name__ == "__main__":
     main()

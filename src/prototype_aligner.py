@@ -221,7 +221,7 @@ def main():
 
     #Parameters
     hash_bits = 15
-    read_length = 151 #be sure this aligns with your fastq
+    read_length = 15 #be sure this aligns with your fastq
 
     #Files
     if len(sys.argv) == 1:
