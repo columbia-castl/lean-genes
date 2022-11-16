@@ -85,7 +85,7 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
             else:
                 newread.align_score = encrypter.encrypt(bytes(get_line[:-1], 'utf-8'))
                 serialized_read = newread.SerializeToString()
-                #socket.send(serialized_read)
+                socket.send(serialized_read)
                 PARSING_STATE = FastqState.READ_LABEL
 
         else:
@@ -99,7 +99,7 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 def main():
    
     read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    read_socket.bind(('127.0.0.1', 4444))
+    read_socket.connect(('127.0.0.1', 4444))
 
     hashkey = get_random_bytes(32)
     cipherkey = get_random_bytes(32)
