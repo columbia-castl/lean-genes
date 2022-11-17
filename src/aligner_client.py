@@ -3,13 +3,18 @@ import hmac
 import sys
 import re
 import socket
+import os
+import array
 
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
+from Crypto.Util import Counter
 from enum import Enum
 from reads_pb2 import Read
 
 debug = False
+mode = "DEBUG"
+AES_BLOCK_SIZE = 16
 
 class FastqState(Enum):
     READ_LABEL = 1
@@ -56,13 +61,16 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
                 if debug: 
                     print(get_line_bytes) 
                 
-                newhash = hmac.new(hashkey, bytes(get_line[:-1], 'utf-8'), hashlib.sha256) 
+                newhash = hmac.new(hashkey, get_line_bytes, hashlib.sha256) 
                 curr_hash = newhash.digest()
                 
                 if debug:
                     print(curr_hash)
-            
-                newread.read = encrypter.encrypt(bytes(get_line[:-1], 'utf-8'))
+
+                #padding
+                while len(get_line_bytes) % AES_BLOCK_SIZE != 0:
+                    get_line_bytes += b'0'
+                newread.read = encrypter.encrypt(get_line_bytes)
                 newread.hash = curr_hash
 
                 PARSING_STATE = FastqState.DIV
@@ -83,8 +91,12 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
                 printf("Error: fastq is not formatted correctly.")
 
             else:
-                newread.align_score = encrypter.encrypt(bytes(get_line[:-1], 'utf-8'))
+                qual_bytes = bytes(get_line[:-1], 'utf-8')
+                while len(qual_bytes) % AES_BLOCK_SIZE != 0:
+                    qual_bytes += b'0'
+                newread.align_score = encrypter.encrypt(qual_bytes)
                 serialized_read = newread.SerializeToString()
+                print("Serialized read size: " + str(len(serialized_read)))
                 socket.send(serialized_read)
                 PARSING_STATE = FastqState.READ_LABEL
 
@@ -96,17 +108,24 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
     return ref_loc
 
+
 def main():
    
     read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     read_socket.connect(('127.0.0.1', 4444))
 
-    hashkey = get_random_bytes(32)
-    cipherkey = get_random_bytes(32)
-    cipher_object = AES.new(cipherkey, AES.MODE_CTR) 
+    if mode == "DEBUG":
+        hashkey = b'0' * 32
+        cipherkey = b'0' * 32
+    else:
+        hashkey = get_random_bytes(32)
+        cipherkey = get_random_bytes(32)
+   
+    #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
+    crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
     print("Parsing fastq...")
-    send_reads(read_socket, cipher_object, hashkey)
+    send_reads(read_socket, crypto, hashkey)
 
 if __name__ == "__main__":
     main()
