@@ -5,13 +5,15 @@ import os
 
 from reads_pb2 import Read
 from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+
+debug = False
+mode = "DEBUG"
 
 def run_redis_server():
     os.system("redis-server aligner_redis.conf &")
 
-
-#Deserialize: read.ParseFromString(serialized_read)
-def receive_reads(read_port, read_size):
+def receive_reads(read_port, serialized_read_size, crypto):
 
     read_parser = Read()
 
@@ -26,21 +28,36 @@ def receive_reads(read_port, read_size):
         conn, addr = read_socket.accept()
         
         while True:
-            data = conn.recv(read_size)
+            data = conn.recv(serialized_read_size)
             read_counter += 1
-            print("-->received data " + str(read_counter))
-            new_read = read_parser.ParseFromString(data)
-            print(read_parser.hash)
+
+            if debug:
+                print("-->received data " + str(read_counter))
+            
+            check_read = read_parser.ParseFromString(data)
+            decrypted_data = crypto.decrypt(read_parser.read)
+            
+            if debug:
+                print("Data: ")
+                print(decrypted_data)
+                print("Hash: ")
+                print(read_parser.hash)
+            
             if not data:
                 break
 
-
-
 def main():
-    read_length = 360
+    serialized_read_size = 360
+
+    if mode == "DEBUG":
+        cipherkey = b'0' * 32
+    else:
+        cipherkey = get_random_bytes(32)
+
+    crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
     run_redis_server()
-    receive_reads(4444, read_length)
+    receive_reads(4444, serialized_read_size, crypto)
 
 if __name__ == "__main__":
     main()

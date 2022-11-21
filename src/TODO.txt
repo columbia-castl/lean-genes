@@ -1,2 +1,4 @@
 - automated installment of different requirements
 - Better command line arg parsing
+- Truncate extra data bytes
+- Preprocessing as part of the workflow
