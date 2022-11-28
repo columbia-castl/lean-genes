@@ -15,7 +15,7 @@ from Crypto.Cipher import AES
 #Global params to help with debug and test
 debug = False
 check_locations = True
-verify_redis = True
+verify_redis = False
 
 limit_hashes = False 
 hash_limit = 100
@@ -45,6 +45,11 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
     #Data structure initialization
     hash_buffer = b''
     end_hashing = False
+
+    #Redis pipeline
+    redis_pipe = redis_table.pipeline()
+    batch_size = 10000
+    batch_counter = 0
 
     while (len(ref_lines) > 0): 
 
@@ -85,9 +90,13 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
             
             newhash = hmac.new(key, hash_buffer[0:read_size], hashlib.sha256)
             curr_hash = newhash.digest()
-           
-            redis_table.set(int.from_bytes(curr_hash, 'big'), hashes_generated) 
-            
+
+            batch_counter += 1 
+            redis_pipe.set(int.from_bytes(curr_hash, 'big'), hashes_generated) 
+            if batch_counter % batch_size == 0:
+                redis_pipe.execute()
+                batch_counter = 0
+
             if verify_redis:
                 print(redis_table.get(int.from_bytes(curr_hash, 'big')))
 
@@ -109,7 +118,10 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
         
         if limit_lines and (lines_processed > line_limit):
             break
-      
+    
+    #Final pipeline flush
+    redis_pipe.execute()
+    
     print("\n*******************************************")
     print(str(hashes_generated) + " hashes generated")
     print(str(lines_processed) + " lines processed") 
@@ -130,7 +142,7 @@ def main():
    
     #Cloud-side operations   
     #TODO: DONT HARDCODE THESE PARAMETERS 
-    redis_table = redis.Redis(host='3.95.197.16', port=6379, db=0, password='lean-genes-17')
+    redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17')
 
     #Reference setup
     processed_ref = get_ref(fasta)
