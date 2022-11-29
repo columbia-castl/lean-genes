@@ -13,7 +13,7 @@ mode = "DEBUG"
 def run_redis_server():
     os.system("redis-server aligner_redis.conf &")
 
-def receive_reads(read_port, serialized_read_size, crypto):
+def receive_reads(read_port, serialized_read_size, crypto, redis_table):
 
     read_parser = Read()
 
@@ -22,6 +22,8 @@ def receive_reads(read_port, serialized_read_size, crypto):
     #read_socket.settimeout(30)
     read_socket.bind(('127.0.0.1', read_port))
     read_counter = 0
+
+    found_reads = 0
 
     while True:
         read_socket.listen()
@@ -36,7 +38,14 @@ def receive_reads(read_port, serialized_read_size, crypto):
             
             check_read = read_parser.ParseFromString(data)
             decrypted_data = crypto.decrypt(read_parser.read)
-            
+
+            read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+            if read_found != None:
+                print("Exact match read found.")
+                found_reads += 1
+            else:
+                print("Read was not exact match.")
+
             if debug:
                 print("Data: ")
                 print(decrypted_data)
@@ -47,7 +56,7 @@ def receive_reads(read_port, serialized_read_size, crypto):
                 break
 
 def main():
-    serialized_read_size = 360
+    serialized_read_size = 70
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
@@ -57,7 +66,9 @@ def main():
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
     run_redis_server()
-    receive_reads(4444, serialized_read_size, crypto)
+
+    redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17')
+    receive_reads(4444, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
     main()

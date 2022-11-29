@@ -96,7 +96,7 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
                     qual_bytes += b'0'
                 newread.align_score = encrypter.encrypt(qual_bytes)
                 serialized_read = newread.SerializeToString()
-                print("Serialized read size: " + str(len(serialized_read)))
+                #print("Serialized read size: " + str(len(serialized_read)))
                 socket.send(serialized_read)
                 PARSING_STATE = FastqState.READ_LABEL
 
@@ -125,7 +125,7 @@ def main():
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
     print("Parsing fastq...")
-    send_reads(read_socket, crypto, hashkey)
+    send_reads(read_socket, crypto, hashkey, sys.argv[1])
 
 if __name__ == "__main__":
     main()

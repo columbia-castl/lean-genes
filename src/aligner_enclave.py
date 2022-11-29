@@ -14,7 +14,7 @@ from Crypto.Cipher import AES
 
 #Global params to help with debug and test
 debug = False
-check_locations = True
+check_locations = False
 verify_redis = False
 
 limit_hashes = False 
@@ -22,6 +22,8 @@ hash_limit = 100
 
 limit_lines = False
 line_limit = 100
+
+mode = "DEBUG"
 
 #After x hashes print progress
 progress_indicator = 5000000
@@ -48,7 +50,7 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 
     #Redis pipeline
     redis_pipe = redis_table.pipeline()
-    batch_size = 10000
+    batch_size = 1000
     batch_counter = 0
 
     while (len(ref_lines) > 0): 
@@ -94,7 +96,8 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
             batch_counter += 1 
             redis_pipe.set(int.from_bytes(curr_hash, 'big'), hashes_generated) 
             if batch_counter % batch_size == 0:
-                redis_pipe.execute()
+                redis_response = redis_pipe.execute()
+                print(redis_response)
                 batch_counter = 0
 
             if verify_redis:
@@ -102,7 +105,6 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 
             if debug:
                 print(curr_hash)
-                print("Placing hash in bucket " + str(table_index) + "\n")
            
             hashes_generated += 1
             hash_buffer = hash_buffer[1:]          
@@ -120,7 +122,8 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
             break
     
     #Final pipeline flush
-    redis_pipe.execute()
+    redis_response = redis_pipe.execute()
+    print(redis_response)
     
     print("\n*******************************************")
     print(str(hashes_generated) + " hashes generated")
@@ -146,7 +149,11 @@ def main():
 
     #Reference setup
     processed_ref = get_ref(fasta)
-    key = get_random_bytes(32)    
+
+    if mode == "DEBUG":
+        key = b'0' * 32
+    else:
+        key = get_random_bytes(32)    
     sliding_window_table(key, processed_ref, redis_table, read_length)
 
 if __name__ == "__main__":
