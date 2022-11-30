@@ -28,6 +28,46 @@ mode = "DEBUG"
 #After x hashes print progress
 progress_indicator = 5000000
 
+class VsockListener:
+    """Server"""
+    def __init__(self, conn_backlog=128):
+        self.conn_backlog = conn_backlog
+
+    def bind(self, port):
+        """Bind and listen for connections on the specified port"""
+        self.sock = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+        self.sock.bind((socket.VMADDR_CID_ANY, port))
+        self.sock.listen(self.conn_backlog)
+
+    def recv_data(self):
+        """Receive data from a remote endpoint"""
+        while True:
+            (from_client, (remote_cid, remote_port)) = self.sock.accept()
+            # Read 1024 bytes at a time
+            while True:
+                try:
+                    data = from_client.recv(1024).decode()
+                except socket.error:
+                    break
+                if not data:
+                    break
+                print(data, end='', flush=True)
+            print()
+            from_client.close()
+
+    def send_data(self, data):
+        """Send data to a renote endpoint"""
+        while True:
+            (to_client, (remote_cid, remote_port)) = self.sock.accept()
+            to_client.sendall(data)
+            to_client.close()
+
+
+def server_handler(port):
+    server = VsockListener()
+    server.bind(port)
+    server.recv_data()
+
 def get_ref(ref_file_path):
     print("\nRetrieve reference file at path " + ref_file_path)
     
@@ -136,6 +176,7 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 def main():
     #Parameters
     read_length = 15 #be sure this aligns with your fastq
+    encrypted_port = 5005
 
     #Files
     if len(sys.argv) == 1:
@@ -155,6 +196,9 @@ def main():
     else:
         key = get_random_bytes(32)    
     sliding_window_table(key, processed_ref, redis_table, read_length)
+
+    #Run server for receiving encrypted reads
+    server_handler(encrypted_port)
 
 if __name__ == "__main__":
     main()
