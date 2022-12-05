@@ -3,44 +3,16 @@ import redis
 import socket
 import os
 
-from reads_pb2 import Read
+from reads_pb2 import Read, PMT_Entry
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from vsock_handlers import VsockStream
 
 debug = False
 mode = "DEBUG"
 
 unmatched_threshold = 10
 
-class VsockStream: 
-    """Client""" 
-    def __init__(self, conn_tmo=5): 
-        self.conn_tmo = conn_tmo 
- 
-    def connect(self, endpoint): 
-        """Connect to the remote endpoint""" 
-        self.sock = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM) 
-        self.sock.settimeout(self.conn_tmo) 
-        self.sock.connect(endpoint) 
- 
-    def send_data(self, data): 
-        """Send data to a remote endpoint""" 
-        self.sock.sendall(data) 
- 
-    def recv_data(self): 
-        """Receive data from a remote endpoint""" 
-        while True: 
-            data = self.sock.recv(1024).decode() 
-            if not data: 
-                break 
-            print(data, end='', flush=True) 
-        print() 
- 
-    def disconnect(self): 
-        """Close the client socket""" 
-        self.sock.close() 
- 
- 
 def client_handler(args): 
     client = VsockStream() 
     endpoint = (args.cid, args.port) 
@@ -52,6 +24,41 @@ def client_handler(args):
 def run_redis_server():
     os.system("redis-server aligner_redis.conf &")
 
+def pmt_proxy(proxy_port, pmt_client_port):
+    pmt_entry_block = 1000
+
+    print("Waiting for enclave to send PMT...")
+    proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    proxy_socket.bind(('', proxy_port))
+
+    pmt_data = []
+    proxy_socket.listen()
+    proxy_conn, addr = proxy_socket.accept()
+
+    while True:
+        data = proxy_conn.recv(pmt_entry_block)
+        pmt_data.append(data)
+        if not data:
+            break
+
+    print("Waiting to send PMT to client...")
+    pmt_client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    pmt_client_socket.bind(('', pmt_client_port))
+    pmt_client_socket.listen()
+    conn, addr = pmt_client_socket.accept()
+
+    begin_transfer = False
+    while not begin_transfer:
+        data = conn.recv(pmt_entry_block)
+        if data.decode() == "Start":
+            begin_transfer = True
+
+    for entry in pmt_data:
+        conn.send(entry)
+
+    pmt_client_socket.close()
+    return proxy_conn
+
 def receive_reads(client_port, unmatched_vsock, serialized_read_size, crypto, redis_table):
 
     read_parser = Read()
@@ -59,7 +66,7 @@ def receive_reads(client_port, unmatched_vsock, serialized_read_size, crypto, re
     #Use read size to calc expected bytes for a read
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #client_socket.settimeout(30)
-    client_socket.bind(('127.0.0.1', client_port))
+    client_socket.bind(('', client_port))
     read_counter = 0
 
     found_reads = 0
@@ -102,7 +109,14 @@ def receive_reads(client_port, unmatched_vsock, serialized_read_size, crypto, re
                 break
 
 def main():
+    #TODO: This shouldn't have to be defined here like this...
     serialized_read_size = 70
+
+    #Network params
+    read_port = 4444
+    pmt_client_port = 4445
+    proxy_port = 5006
+    redis_port = 6379
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
@@ -111,10 +125,12 @@ def main():
 
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
+    pmt_proxy(proxy_port, pmt_client_port)
+
     run_redis_server()
 
-    redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17')
-    receive_reads(4444, '', serialized_read_size, crypto, redis_table)
+    redis_table = redis.Redis(host='44.202.235.148', port=redis_port, db=0, password='lean-genes-17')
+    receive_reads(read_port, '', serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
     main()

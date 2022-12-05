@@ -8,3 +8,7 @@ message Read {
 	required bytes hash = 3;
 	optional int32 counter = 4;
 }
+
+message PMT_Entry {
+	required bytes pos = 1;
+}

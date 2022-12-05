@@ -7,10 +7,13 @@ import time
 import re
 import redis
 import socket
+import time
 
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
+from reads_pb2 import PMT_Entry 
+from vsock_handlers import VsockListener
 
 #Global params to help with debug and test
 debug = False
@@ -28,41 +31,6 @@ mode = "DEBUG"
 #After x hashes print progress
 progress_indicator = 5000000
 
-class VsockListener:
-    """Server"""
-    def __init__(self, conn_backlog=128):
-        self.conn_backlog = conn_backlog
-
-    def bind(self, port):
-        """Bind and listen for connections on the specified port"""
-        self.sock = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
-        self.sock.bind((socket.VMADDR_CID_ANY, port))
-        self.sock.listen(self.conn_backlog)
-
-    def recv_data(self):
-        """Receive data from a remote endpoint"""
-        while True:
-            (from_client, (remote_cid, remote_port)) = self.sock.accept()
-            # Read 1024 bytes at a time
-            while True:
-                try:
-                    data = from_client.recv(1024).decode()
-                except socket.error:
-                    break
-                if not data:
-                    break
-                print(data, end='', flush=True)
-            print()
-            from_client.close()
-
-    def send_data(self, data):
-        """Send data to a renote endpoint"""
-        while True:
-            (to_client, (remote_cid, remote_port)) = self.sock.accept()
-            to_client.sendall(data)
-            to_client.close()
-
-
 def server_handler(port):
     server = VsockListener()
     server.bind(port)
@@ -77,7 +45,7 @@ def get_ref(ref_file_path):
     ref_file.close()
     return full_ref
 
-def sliding_window_table(key, ref_lines, redis_table, read_size=151):
+def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
 
     #Important stat/debug counters
     hashes_generated = 0
@@ -134,7 +102,7 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
             curr_hash = newhash.digest()
 
             batch_counter += 1 
-            redis_pipe.set(int.from_bytes(curr_hash, 'big'), hashes_generated) 
+            redis_pipe.set(int.from_bytes(curr_hash, 'big'), pmt[hashes_generated]) 
             if batch_counter % batch_size == 0:
                 redis_response = redis_pipe.execute()
                 print(redis_response)
@@ -173,32 +141,65 @@ def sliding_window_table(key, ref_lines, redis_table, read_size=151):
 
     return True 
 
-def main():
-    #Parameters
-    read_length = 15 #be sure this aligns with your fastq
-    encrypted_port = 5005
+def gen_permutation(ref_length, read_size):
+    permutation = [i for i in range(ref_length - read_size + 1)]
+    for i in range(len(permutation)-1, 0, -1):
+        j = random.randint(0, i+1)
+        permutation[i], permutation[j] = permutation[j], permutation[i]
+    return permutation
 
-    #Files
+def transfer_pmt(pmt, pmt_port):    
+    pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    pmt_socket.connect(('44.202.235.148', pmt_port)) 
+    pmt_entry = PMT_Entry()
+    for entry in pmt:
+        pmt_entry.pos = bytes(entry)
+        #print(len(pmt_entry.SerializeToString()))
+        pmt_socket.send(pmt_entry.SerializeToString())
+
+def main():
+    #Genome parameters
+    ref_length = 100 #be sure this aligns with your fasta
+    read_length = 15 #be sure this aligns with your fastq
+    
+    #Network parameters
+    encrypted_port = 5005
+    pmt_port = 5006
+
+    #PMT generation
+    print("Generate PMT permutation")
+    pmt = gen_permutation(ref_length, read_length)
+
+    #Send PMT
+    print("Transferring PMT via proxy...")    
+    transfer_pmt(pmt, pmt_port)
+
+    #TODO: This is janky, change this
+    time.sleep(30)
+
+    #Reference setup
     if len(sys.argv) == 1:
         fasta = "../test_data/small_ref.fa" 
     else:
         fasta = sys.argv[1]
    
+    processed_ref = get_ref(fasta)
+
     #Cloud-side operations   
     #TODO: DONT HARDCODE THESE PARAMETERS 
     redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17')
 
-    #Reference setup
-    processed_ref = get_ref(fasta)
-
+    #Crypto key for hashes
     if mode == "DEBUG":
         key = b'0' * 32
     else:
         key = get_random_bytes(32)    
-    sliding_window_table(key, processed_ref, redis_table, read_length)
+
+    #Hash ref genome
+    sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
     #Run server for receiving encrypted reads
-    server_handler(encrypted_port)
+    #server_handler(encrypted_port)
 
 if __name__ == "__main__":
     main()

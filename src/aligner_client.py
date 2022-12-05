@@ -28,6 +28,18 @@ cipher_object = ""
 read_string = ""
 read_socket = ""
 
+client_commands = ['help','get_pmt', 'send_reads', 'stop']
+
+def receive_pmt(pmt_socket):
+    pmt = []
+    recv_block_size = 1000
+    pmt_socket.send("Start".encode())
+    while True:
+        data = pmt_socket.recv(recv_block_size)
+        pmt.append(data)
+        if not data:
+            break
+
 def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
     global PARSING_STATE
 
@@ -109,11 +121,12 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
     return ref_loc
 
 
-def main():
-   
-    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    read_socket.connect(('127.0.0.1', 4444))
+def receive_pmt_wrapper(server_ip, pmt_port):
+    pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    pmt_socket.connect((server_ip, pmt_port))
+    receive_pmt(pmt_socket)
 
+def send_read_wrapper(server_ip, read_port, filename): 
     if mode == "DEBUG":
         hashkey = b'0' * 32
         cipherkey = b'0' * 32
@@ -124,8 +137,38 @@ def main():
     #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
+    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    read_socket.connect((server_ip, read_port))
+
     print("Parsing fastq...")
-    send_reads(read_socket, crypto, hashkey, sys.argv[1])
+    send_reads(read_socket, crypto, hashkey, filename)
+
+def main():
+ 
+    pmt_port = 4445
+    read_port = 4444
+    server_ip = '44.202.235.148'
+
+    command_str = ""
+    print("Client initialized")
+    while True:
+        command_str = input("Input command: ")
+        if command_str not in client_commands:
+            print("Please enter a valid command. See available commands with 'help'")
+        elif command_str == "help":
+            print("Available commands are: ")
+            for command in client_commands:
+                print("\t" + command)
+        elif command_str == "get_pmt":
+            receive_pmt_wrapper(server_ip, pmt_port)
+        elif command_str == "send_reads":
+            readfile = input("\tEnter path to fastq: ")
+            send_read_wrapper(server_ip, read_port, readfile)
+        elif command_str == "stop":
+            break
+        else:
+            print("CLIENT ERROR. PLEASE RESTART.")
+
 
 if __name__ == "__main__":
     main()

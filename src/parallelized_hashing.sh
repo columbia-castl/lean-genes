@@ -1,7 +1,7 @@
 #!/bin/bash
 
 NUM_SPLITS=22
-ALIGNER=redis_cloudside
+ALIGNER=enclave
 
 for (( i=1; i<=$NUM_SPLITS; i++ )) 
 do
