@@ -104,7 +104,14 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             batch_counter += 1 
             redis_pipe.set(int.from_bytes(curr_hash, 'big'), pmt[hashes_generated]) 
             if batch_counter % batch_size == 0:
-                redis_response = redis_pipe.execute()
+                while True:
+                    try:
+                        redis_response = redis_pipe.execute()
+                        break
+                    except ConnectionError:
+                        print("Redis connection error... Trying again.")
+                        sleep(10)
+
                 print(redis_response)
                 batch_counter = 0
 
@@ -130,7 +137,17 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             break
     
     #Final pipeline flush
-    redis_response = redis_pipe.execute()
+    while True:
+        try:
+            redis_response = redis_pipe.execute()
+            break
+        except ConnectionRefusedError:
+            try:
+                print("Redis connection error... Trying again.")
+                sleep(10)
+            except redis.ConnectionError:
+                print("Redis connection error... Trying again.")
+                sleep(10)
     print(redis_response)
     
     print("\n*******************************************")
@@ -156,6 +173,11 @@ def transfer_pmt(pmt, pmt_port):
         pmt_entry.pos = bytes(entry)
         #print(len(pmt_entry.SerializeToString()))
         pmt_socket.send(pmt_entry.SerializeToString())
+    return pmt_socket
+
+def get_encrypted_reads(vsock_socket):
+    while True: 
+        vsock_socket.recv(1024)
 
 def main():
     #Genome parameters
@@ -163,8 +185,7 @@ def main():
     read_length = 15 #be sure this aligns with your fastq
     
     #Network parameters
-    encrypted_port = 5005
-    pmt_port = 5006
+    vsock_port = 5006
 
     #PMT generation
     print("Generate PMT permutation")
@@ -172,7 +193,8 @@ def main():
 
     #Send PMT
     print("Transferring PMT via proxy...")    
-    transfer_pmt(pmt, pmt_port)
+    vsock_socket = transfer_pmt(pmt, vsock_port)
+    vsock_socket.close()
 
     #TODO: This is janky, change this
     time.sleep(30)
@@ -187,7 +209,13 @@ def main():
 
     #Cloud-side operations   
     #TODO: DONT HARDCODE THESE PARAMETERS 
-    redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17')
+    while True:    
+        try:
+            redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
+            break 
+        except ConnectionError:
+            print("Couldn't connect to redis yet.")
+            sleep(10)
 
     #Crypto key for hashes
     if mode == "DEBUG":
@@ -199,7 +227,9 @@ def main():
     sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
     #Run server for receiving encrypted reads
-    #server_handler(encrypted_port)
+    vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    vsock_socket.connect(('44.202.235.148', vsock_port)) 
+    get_encrypted_reads(vsock_socket)
 
 if __name__ == "__main__":
     main()
