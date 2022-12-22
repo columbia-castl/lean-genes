@@ -178,11 +178,12 @@ def transfer_pmt(pmt, pmt_port):
 def get_encrypted_reads(vsock_socket):
     while True: 
         vsock_socket.recv(1024)
+        print("received batch of unmatched reads from cloud")
 
 def main():
     #Genome parameters
-    ref_length = 100 #be sure this aligns with your fasta
-    read_length = 15 #be sure this aligns with your fastq
+    ref_length = 35106643 #be sure this aligns with your fasta
+    read_length = 151 #be sure this aligns with your fastq
     
     #Network parameters
     vsock_port = 5006
