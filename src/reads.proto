@@ -10,5 +10,5 @@ message Read {
 }
 
 message PMT_Entry {
-	required bytes pos = 1;
+	required int32 pos = 1;
 }

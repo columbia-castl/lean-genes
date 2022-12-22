@@ -167,12 +167,15 @@ def gen_permutation(ref_length, read_size):
 
 def transfer_pmt(pmt, pmt_port):    
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    pmt_socket.connect(('44.202.235.148', pmt_port)) 
+    pmt_socket.connect(('54.165.178.248', pmt_port)) 
     pmt_entry = PMT_Entry()
+    count_entries = 0
     for entry in pmt:
-        pmt_entry.pos = bytes(entry)
+        pmt_entry.pos = entry
         #print(len(pmt_entry.SerializeToString()))
         pmt_socket.send(pmt_entry.SerializeToString())
+        count_entries += 1
+    print(str(count_entries) + " PMT entries processed")
     return pmt_socket
 
 def get_encrypted_reads(vsock_socket):
@@ -212,7 +215,7 @@ def main():
     #TODO: DONT HARDCODE THESE PARAMETERS 
     while True:    
         try:
-            redis_table = redis.Redis(host='44.202.235.148', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
+            redis_table = redis.Redis(host='54.165.178.248', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
             break 
         except ConnectionError:
             print("Couldn't connect to redis yet.")
@@ -229,7 +232,7 @@ def main():
 
     #Run server for receiving encrypted reads
     vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    vsock_socket.connect(('44.202.235.148', vsock_port)) 
+    vsock_socket.connect(('54.165.178.248', vsock_port)) 
     get_encrypted_reads(vsock_socket)
 
 if __name__ == "__main__":
