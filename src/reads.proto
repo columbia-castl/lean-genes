@@ -10,5 +10,6 @@ message Read {
 }
 
 message PMT_Entry {
-	required int32 pos = 1;
+	required uint32 pos = 1;
+	optional uint32 chrom = 2;
 }

@@ -10,7 +10,8 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 from enum import Enum
-from reads_pb2 import Read
+from reads_pb2 import Read, PMT_Entry
+from google.protobuf.internal.decoder import _DecodeVarint32
 
 debug = False
 mode = "DEBUG"
@@ -32,11 +33,27 @@ client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
 def receive_pmt(pmt_socket):
     pmt = []
-    recv_block_size = 1000
+    recv_block_size = 1024
     pmt_socket.send("Start".encode())
+
+    #https://www.datadoghq.com/blog/engineering/protobuf-parsing-in-python/
     while True:
         data = pmt_socket.recv(recv_block_size)
-        pmt.append(data)
+        while data:
+            msg_len, size_len = _DecodeVarint32(data, 0)
+
+            while (size_len + msg_len > len(data)):
+                data += pmt_socket.recv(recv_block_size)
+            msg_buf = data[size_len: msg_len + size_len]
+
+            new_entry = PMT_Entry()
+            check_entry = new_entry.ParseFromString(msg_buf)
+            if debug: 
+                print(str(new_entry.pos) + " is PMT entry")
+
+            pmt.append(new_entry.pos)
+            data = data[msg_len+size_len:]
+
         if not data:
             break
 
@@ -147,7 +164,7 @@ def main():
  
     pmt_port = 4445
     read_port = 4444
-    server_ip = '44.202.235.148'
+    server_ip = '54.159.196.2'
 
     command_str = ""
     print("Client initialized")

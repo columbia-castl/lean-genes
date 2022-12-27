@@ -14,6 +14,7 @@ from Crypto.Random import random
 from Crypto.Cipher import AES
 from reads_pb2 import PMT_Entry 
 from vsock_handlers import VsockListener
+from google.protobuf.internal.encoder import _VarintBytes
 
 #Global params to help with debug and test
 debug = False
@@ -148,7 +149,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             except redis.ConnectionError:
                 print("Redis connection error... Trying again.")
                 sleep(10)
-    print(redis_response)
+    #print(redis_response)
     
     print("\n*******************************************")
     print(str(hashes_generated) + " hashes generated")
@@ -165,14 +166,21 @@ def gen_permutation(ref_length, read_size):
         permutation[i], permutation[j] = permutation[j], permutation[i]
     return permutation
 
-def transfer_pmt(pmt, pmt_port):    
+def transfer_pmt(pmt, pmt_port, chrom_id=0):    
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    pmt_socket.connect(('54.165.178.248', pmt_port)) 
+    pmt_socket.connect(('54.159.196.2', pmt_port)) 
     pmt_entry = PMT_Entry()
     count_entries = 0
     for entry in pmt:
+        #Fill in fields of PMT entry 
         pmt_entry.pos = entry
+        if chrom_id != 0:
+            pmt_entry.chrom = chrom_id
         #print(len(pmt_entry.SerializeToString()))
+        if debug:
+            print(entry)
+        #Must allow client to properly parse PMT info
+        pmt_socket.send(_VarintBytes(pmt_entry.ByteSize()))
         pmt_socket.send(pmt_entry.SerializeToString())
         count_entries += 1
     print(str(count_entries) + " PMT entries processed")
@@ -185,9 +193,12 @@ def get_encrypted_reads(vsock_socket):
 
 def main():
     #Genome parameters
-    ref_length = 35106643 #be sure this aligns with your fasta
-    read_length = 151 #be sure this aligns with your fastq
-    
+    #CHR21 parameters 
+    #ref_length = 35106643 #be sure this aligns with your fasta
+    #read_length = 151 #be sure this aligns with your fastq
+    ref_length = 100
+    read_length = 15
+
     #Network parameters
     vsock_port = 5006
 
@@ -215,7 +226,7 @@ def main():
     #TODO: DONT HARDCODE THESE PARAMETERS 
     while True:    
         try:
-            redis_table = redis.Redis(host='54.165.178.248', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
+            redis_table = redis.Redis(host='54.159.196.2', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
             break 
         except ConnectionError:
             print("Couldn't connect to redis yet.")
@@ -232,7 +243,7 @@ def main():
 
     #Run server for receiving encrypted reads
     vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    vsock_socket.connect(('54.165.178.248', vsock_port)) 
+    vsock_socket.connect(('54.159.196.2', vsock_port)) 
     get_encrypted_reads(vsock_socket)
 
 if __name__ == "__main__":
