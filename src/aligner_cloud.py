@@ -11,7 +11,11 @@ from vsock_handlers import VsockStream
 debug = False
 mode = "DEBUG"
 
+do_pmt_proxy = False
+
 unmatched_threshold = 10
+
+
 
 def client_handler(args): 
     client = VsockStream() 
@@ -107,6 +111,9 @@ def receive_reads(client_port, unmatched_socket, serialized_read_size, crypto, r
             if not data:
                 break
 
+    unmatched_socket.send(unmatched_reads)
+    unmatched_reads.clear()
+
 def main():
     #TODO: This shouldn't have to be defined here like this...
     serialized_read_size = 70
@@ -124,11 +131,12 @@ def main():
 
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
-    proxy_socket = pmt_proxy(vsock_port, pmt_client_port)
+    if do_pmt_proxy: 
+        proxy_socket = pmt_proxy(vsock_port, pmt_client_port)
 
     run_redis_server()
 
-    redis_table = redis.Redis(host='44.202.235.148', port=redis_port, db=0, password='lean-genes-17')
+    redis_table = redis.Redis(host='54.159.196.2', port=redis_port, db=0, password='lean-genes-17')
     receive_reads(read_port, proxy_socket, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":

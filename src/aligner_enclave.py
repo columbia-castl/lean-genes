@@ -21,6 +21,8 @@ debug = False
 check_locations = False
 verify_redis = False
 
+pmt_transfer = False
+
 limit_hashes = False 
 hash_limit = 100
 
@@ -203,16 +205,17 @@ def main():
     vsock_port = 5006
 
     #PMT generation
-    print("Generate PMT permutation")
-    pmt = gen_permutation(ref_length, read_length)
+    if pmt_transfer:
+        print("Generate PMT permutation")
+        pmt = gen_permutation(ref_length, read_length)
 
-    #Send PMT
-    print("Transferring PMT via proxy...")    
-    vsock_socket = transfer_pmt(pmt, vsock_port)
-    vsock_socket.close()
+        #Send PMT
+        print("Transferring PMT via proxy...")    
+        vsock_socket = transfer_pmt(pmt, vsock_port)
+        vsock_socket.close()
 
-    #TODO: This is janky, change this
-    time.sleep(30)
+        #TODO: This is janky, change this
+        time.sleep(30)
 
     #Reference setup
     if len(sys.argv) == 1:
