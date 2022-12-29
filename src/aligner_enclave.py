@@ -12,7 +12,7 @@ import time
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
-from reads_pb2 import PMT_Entry 
+from reads_pb2 import Read, PMT_Entry 
 from vsock_handlers import VsockListener
 from google.protobuf.internal.encoder import _VarintBytes
 
@@ -185,15 +185,38 @@ def transfer_pmt(pmt, pmt_port, chrom_id=0):
     return pmt_socket
 
 def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
-    unmatched_fastq = []
+    unmatched_fastq = ""
+    read_parser = Read()
+
+    anonymized_label = "@unlabeled"
+
     while True: 
         vsock_socket.listen()
         conn, addr = vsock_socket.accept()
 
+        #TODO: Real crypto key management
+        crypto_key = b'0' * 32
+        crypto = AES.new(crypto_key, AES.MODE_ECB)
+        unmatched_counter = 0
+
         data = 1 
         while data:
+            if debug:
+                print("-->received unmatched read from cloud")
+        
+            unmatched_counter += 1
+        
             data = conn.recv(serialized_read_size)
-            print("received unmatched read from cloud")
+            check_read = read_parser.ParseFromString(data)
+            
+            unmatched_fastq += (anonymized_label + "\n")
+            unmatched_fastq += str(crypto.decrypt(read_parser.read)) + "\n"
+            unmatched_fastq += "+\n"
+            unmatched_fastq += str(read_parser.align_score) + "\n"
+
+            if unmatched_counter % batch_size == 0:
+                #WHERE BWA WILL BE CALLED [ os.system()? ]
+                print(unmatched_fastq)
 
 def main():
     #Genome parameters
