@@ -20,15 +20,11 @@ from google.protobuf.internal.encoder import _VarintBytes
 debug = False
 check_locations = False
 verify_redis = False
-
 pmt_transfer = False
-
 limit_hashes = False 
 hash_limit = 100
-
 limit_lines = False
 line_limit = 100
-
 mode = "DEBUG"
 
 #After x hashes print progress
@@ -188,10 +184,12 @@ def transfer_pmt(pmt, pmt_port, chrom_id=0):
     print(str(count_entries) + " PMT entries processed")
     return pmt_socket
 
-def get_encrypted_reads(vsock_socket):
+def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
+    unmatched_fastq = []
     while True: 
-        vsock_socket.recv(1024)
-        print("received batch of unmatched reads from cloud")
+        vsock_socket.recv(serialized_read_size)
+        if debug: 
+	    print("received unmatched read from cloud")
 
 def main():
     #Genome parameters
@@ -200,6 +198,9 @@ def main():
     #read_length = 151 #be sure this aligns with your fastq
     ref_length = 100
     read_length = 15
+
+    #leangenes parameters
+    batch_size = 50	
 
     #Network parameters
     vsock_port = 5006

@@ -15,8 +15,6 @@ do_pmt_proxy = False
 
 unmatched_threshold = 10
 
-
-
 def client_handler(args): 
     client = VsockStream() 
     endpoint = (args.cid, args.port) 
@@ -73,7 +71,8 @@ def receive_reads(client_port, unmatched_socket, serialized_read_size, crypto, r
     client_socket.bind(('', client_port))
     read_counter = 0
 
-    found_reads = 0
+    exact_read_counter = 0
+    unmatched_read_counter = 0
     unmatched_reads = []
 
     while True:
@@ -88,19 +87,25 @@ def receive_reads(client_port, unmatched_socket, serialized_read_size, crypto, r
                 print("-->received data " + str(read_counter))
             
             check_read = read_parser.ParseFromString(data)
-            decrypted_data = crypto.decrypt(read_parser.read)
 
-            read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
-            if read_found != None:
-                print("Exact match read found.")
-                found_reads += 1
-            else:
-                print("Read was not exact match.")
-                unmatched_reads.append(read_parser.read)                
+	        #Cloud can only see reads in debug mode
+            if debug:
+                decrypted_data = crypto.decrypt(read_parser.read)
+
+	        #Sanity check, avoid looking in db for connection-ending/malformed msgs
+            if len(read_parser.hash) > 0:
+                read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+                if read_found != None:
+                    print("Exact match read found.")
+                    exact_read_counter += 1
+                else:
+                    print("Read was not exact match.")
+                    unmatched_read_counter += 1
+                    unmatched_reads.append(data)                
 
             if len(unmatched_reads) > unmatched_threshold:
-               unmatched_socket.send(unmatched_reads)
-               unmatched_reads.clear()
+                unmatched_socket.send(unmatched_reads)
+                unmatched_reads.clear()
 
             if debug:
                 print("Data: ")
