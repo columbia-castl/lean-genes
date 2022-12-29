@@ -164,7 +164,7 @@ def main():
  
     pmt_port = 4445
     read_port = 4444
-    server_ip = '54.159.196.2'
+    server_ip = '3.87.229.175'
 
     command_str = ""
     print("Client initialized")

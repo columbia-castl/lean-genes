@@ -166,7 +166,7 @@ def gen_permutation(ref_length, read_size):
 
 def transfer_pmt(pmt, pmt_port, chrom_id=0):    
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    pmt_socket.connect(('54.159.196.2', pmt_port)) 
+    pmt_socket.connect(('3.87.229.175', pmt_port)) 
     pmt_entry = PMT_Entry()
     count_entries = 0
     for entry in pmt:
@@ -187,8 +187,12 @@ def transfer_pmt(pmt, pmt_port, chrom_id=0):
 def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
     unmatched_fastq = []
     while True: 
-        vsock_socket.recv(serialized_read_size)
-        if debug: 
+        vsock_socket.listen()
+        conn, addr = vsock_socket.accept()
+
+        data = 1 
+        while data:
+            data = conn.recv(serialized_read_size)
             print("received unmatched read from cloud")
 
 def main():
@@ -200,7 +204,7 @@ def main():
     read_length = 15
 
     #leangenes parameters
-    batch_size = 50	
+    batch_size = 1 	
     serialized_read_size = 70
 
     #Network parameters
@@ -231,7 +235,7 @@ def main():
     #TODO: DONT HARDCODE THESE PARAMETERS 
     while True:    
         try:
-            redis_table = redis.Redis(host='54.159.196.2', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
+            redis_table = redis.Redis(host='3.87.229.175', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
             break 
         except ConnectionError:
             print("Couldn't connect to redis yet.")
@@ -248,7 +252,7 @@ def main():
 
     #Run server for receiving encrypted reads
     vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    vsock_socket.connect(('54.159.196.2', vsock_port)) 
+    vsock_socket.bind(('', vsock_port)) 
     get_encrypted_reads(vsock_socket, serialized_read_size, batch_size)
 
 if __name__ == "__main__":

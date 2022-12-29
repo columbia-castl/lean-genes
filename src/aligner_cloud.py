@@ -13,7 +13,7 @@ mode = "DEBUG"
 
 do_pmt_proxy = False
 
-unmatched_threshold = 10
+unmatched_threshold = 0
 
 def client_handler(args): 
     client = VsockStream() 
@@ -61,7 +61,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     pmt_client_socket.close()
     return proxy_socket
 
-def receive_reads(client_port, unmatched_socket, serialized_read_size, crypto, redis_table):
+def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read_size, crypto, redis_table):
 
     read_parser = Read()
 
@@ -103,8 +103,11 @@ def receive_reads(client_port, unmatched_socket, serialized_read_size, crypto, r
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
-            if len(unmatched_reads) > unmatched_threshold:
-                unmatched_socket.send(unmatched_reads)
+            if len(unmatched_reads) > unmatched_threshold: 
+                if unmatched_read_counter == unmatched_threshold + 1: 
+                    unmatched_socket.connect(('3.87.229.175', unmatched_port)) 
+                for read in unmatched_reads:
+                    unmatched_socket.send(read)
                 unmatched_reads.clear()
 
             if debug:
@@ -140,12 +143,11 @@ def main():
         proxy_socket = pmt_proxy(vsock_port, pmt_client_port)
     else:
         proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        proxy_socket.bind(('', vsock_port))
-
+    
     run_redis_server()
 
     redis_table = redis.Redis(host='3.87.229.175', port=redis_port, db=0, password='lean-genes-17')
-    receive_reads(read_port, proxy_socket, serialized_read_size, crypto, redis_table)
+    receive_reads(read_port, proxy_socket, vsock_port, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
     main()
