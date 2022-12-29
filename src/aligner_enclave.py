@@ -189,7 +189,7 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
     while True: 
         vsock_socket.recv(serialized_read_size)
         if debug: 
-	    print("received unmatched read from cloud")
+            print("received unmatched read from cloud")
 
 def main():
     #Genome parameters
@@ -201,15 +201,16 @@ def main():
 
     #leangenes parameters
     batch_size = 50	
+    serialized_read_size = 70
 
     #Network parameters
     vsock_port = 5006
 
+    print("Generate PMT permutation")
+    pmt = gen_permutation(ref_length, read_length)
+
     #PMT generation
     if pmt_transfer:
-        print("Generate PMT permutation")
-        pmt = gen_permutation(ref_length, read_length)
-
         #Send PMT
         print("Transferring PMT via proxy...")    
         vsock_socket = transfer_pmt(pmt, vsock_port)
@@ -248,7 +249,7 @@ def main():
     #Run server for receiving encrypted reads
     vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     vsock_socket.connect(('54.159.196.2', vsock_port)) 
-    get_encrypted_reads(vsock_socket)
+    get_encrypted_reads(vsock_socket, serialized_read_size, batch_size)
 
 if __name__ == "__main__":
     main()

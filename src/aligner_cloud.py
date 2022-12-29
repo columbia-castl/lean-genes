@@ -138,10 +138,13 @@ def main():
 
     if do_pmt_proxy: 
         proxy_socket = pmt_proxy(vsock_port, pmt_client_port)
+    else:
+        proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        proxy_socket.bind(('', vsock_port))
 
     run_redis_server()
 
-    redis_table = redis.Redis(host='54.159.196.2', port=redis_port, db=0, password='lean-genes-17')
+    redis_table = redis.Redis(host='3.87.229.175', port=redis_port, db=0, password='lean-genes-17')
     receive_reads(read_port, proxy_socket, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
