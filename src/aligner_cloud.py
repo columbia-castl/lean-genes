@@ -107,6 +107,8 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
             if len(unmatched_reads) > unmatched_threshold: 
                 if unmatched_read_counter == unmatched_threshold + 1: 
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], unmatched_port)) 
+                if debug:
+                    print("Len of unmatched reads: " + str(len(unmatched_reads)))
                 for read in unmatched_reads:
                     unmatched_socket.send(read)
                 unmatched_reads.clear()
@@ -120,11 +122,10 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
             if not data:
                 break
 
-    unmatched_socket.send(unmatched_reads)
+    #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
 def main():
-    #TODO: This shouldn't have to be defined here like this...
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network params

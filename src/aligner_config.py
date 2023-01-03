@@ -27,6 +27,6 @@ enclave_settings = dict(
 genome_params = dict(
     REF_LENGTH = 100, #Length of FASTA sequence
     READ_LENGTH = 15,  #Length of individual FASTQ reads
-    SERIALIZED_READ_SIZE = 70,
-    BATCH_SIZE = 1
+    SERIALIZED_READ_SIZE = 69,
+    BATCH_SIZE = 1 #Length of FASTQs created by enclave
 )

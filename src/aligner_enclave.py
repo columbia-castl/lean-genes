@@ -211,13 +211,16 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
             check_read = read_parser.ParseFromString(data)
             
             unmatched_fastq += (anonymized_label + "\n")
-            unmatched_fastq += str(crypto.decrypt(read_parser.read)) + "\n"
+            
+            read_size = genome_params["READ_LENGTH"]
+            unmatched_fastq += str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8') + "\n"
             unmatched_fastq += "+\n"
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
             if unmatched_counter % batch_size == 0:
                 #WHERE BWA WILL BE CALLED [ os.system()? ]
                 print(unmatched_fastq)
+                unmatched_fastq = ""
 
 def main():
 

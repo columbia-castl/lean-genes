@@ -122,11 +122,17 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
             else:
                 qual_bytes = bytes(get_line[:-1], 'utf-8')
+                qual_string = get_line[:-1]
                 while len(qual_bytes) % AES_BLOCK_SIZE != 0:
                     qual_bytes += b'0'
-                newread.align_score = encrypter.encrypt(qual_bytes)
+
+                #TODO: proper handling of quality encryption
+                #newread.align_score = encrypter.encrypt(qual_bytes)
+                newread.align_score = qual_string
+                print(qual_string)
+
                 serialized_read = newread.SerializeToString()
-                #print("Serialized read size: " + str(len(serialized_read)))
+                print("Serialized read size: " + str(len(serialized_read)))
                 socket.send(serialized_read)
                 PARSING_STATE = FastqState.READ_LABEL
 
