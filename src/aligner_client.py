@@ -6,6 +6,7 @@ import socket
 import os
 import array
 
+from aligner_config import global_settings, client_settings, genome_params
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
@@ -162,9 +163,9 @@ def send_read_wrapper(server_ip, read_port, filename):
 
 def main():
  
-    pmt_port = 4445
-    read_port = 4444
-    server_ip = '3.87.229.175'
+    pmt_port = client_settings["pmt_port"]
+    read_port = client_settings["read_port"]
+    server_ip = client_settings["server_ip"]
 
     command_str = ""
     print("Client initialized")

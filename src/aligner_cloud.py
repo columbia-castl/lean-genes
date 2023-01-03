@@ -3,6 +3,7 @@ import redis
 import socket
 import os
 
+from aligner_config import global_settings, pubcloud_settings, genome_params
 from reads_pb2 import Read, PMT_Entry
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -105,7 +106,7 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
 
             if len(unmatched_reads) > unmatched_threshold: 
                 if unmatched_read_counter == unmatched_threshold + 1: 
-                    unmatched_socket.connect(('3.87.229.175', unmatched_port)) 
+                    unmatched_socket.connect((pubcloud_settings["enclave_ip"], unmatched_port)) 
                 for read in unmatched_reads:
                     unmatched_socket.send(read)
                 unmatched_reads.clear()
@@ -124,13 +125,13 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
 
 def main():
     #TODO: This shouldn't have to be defined here like this...
-    serialized_read_size = 70
+    serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network params
-    read_port = 4444
-    pmt_client_port = 4445
-    vsock_port = 5006
-    redis_port = 6379
+    read_port = pubcloud_settings["read_port"]
+    pmt_client_port = pubcloud_settings["pmt_client_port"]
+    vsock_port = pubcloud_settings["vsock_port"]
+    redis_port = global_settings["redis_port"]
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
@@ -146,7 +147,7 @@ def main():
     
     run_redis_server()
 
-    redis_table = redis.Redis(host='3.87.229.175', port=redis_port, db=0, password='lean-genes-17')
+    redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
     receive_reads(read_port, proxy_socket, vsock_port, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":

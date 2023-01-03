@@ -9,6 +9,7 @@ import redis
 import socket
 import time
 
+from aligner_config import global_settings, enclave_settings, genome_params
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
@@ -219,19 +220,14 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
                 print(unmatched_fastq)
 
 def main():
-    #Genome parameters
-    #CHR21 parameters 
-    #ref_length = 35106643 #be sure this aligns with your fasta
-    #read_length = 151 #be sure this aligns with your fastq
-    ref_length = 100
-    read_length = 15
 
-    #leangenes parameters
-    batch_size = 1 	
-    serialized_read_size = 70
+    ref_length = genome_params["REF_LENGTH"]
+    read_length = genome_params["READ_LENGTH"]
+    batch_size = genome_params["BATCH_SIZE"]	
+    serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network parameters
-    vsock_port = 5006
+    vsock_port = enclave_settings["vsock_port"]
 
     print("Generate PMT permutation")
     pmt = gen_permutation(ref_length, read_length)
@@ -258,7 +254,7 @@ def main():
     #TODO: DONT HARDCODE THESE PARAMETERS 
     while True:    
         try:
-            redis_table = redis.Redis(host='3.87.229.175', port=6379, db=0, password='lean-genes-17',socket_connect_timeout=300)
+            redis_table = redis.Redis(host=global_settings["redis_ip"], port=global_settings["redis_port"], db=0, password='lean-genes-17',socket_connect_timeout=300)
             break 
         except ConnectionError:
             print("Couldn't connect to redis yet.")
