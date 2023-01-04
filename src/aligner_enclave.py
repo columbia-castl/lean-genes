@@ -33,6 +33,7 @@ mode = "DEBUG"
 progress_indicator = 5000000
 
 def trigger_bwa_indexing(bwa_path, fasta):
+    print("Begin BWA indexing...") 
     os.system(bwa_path + "/bwa index " + fasta + " &")
 
 def server_handler(port):
@@ -273,9 +274,10 @@ def main():
     else:
         key = get_random_bytes(32)    
 
-    #In background, allow BWA to index FASTA
+    #In background, allow BWA to index FASTA if index file doesn't exist
     bwa_path = enclave_settings["bwa_path"]
-    trigger_bwa_indexing(bwa_path, fasta)
+    if not global_settings["index_exists"]:
+        trigger_bwa_indexing(bwa_path, fasta)
 
     #Hash ref genome
     sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
