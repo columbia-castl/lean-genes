@@ -24,6 +24,9 @@ This component can be used to simulate or actually be run within a trusted encla
 Its responsibilities include generation of a secure permutation, a sliding hash window of the entire FASTA that is sent to a redis db being run by the public cloud, and a 
 server-type component that receives not exactly-matched reads from the public cloud component, batches them into FASTQ files, and dispatches them to be run by BWA.
 
+###### BWA
+If you don't already have BWA installed on your system, you can use the ``install_bwa.sh`` script included in the main directory. Otherwise, ensure that the configuration file points to where your BWA copy is installed, unless it is on the system PATH, in which case you could indicate this with the empty string.
+
 ###### Running it
 To run it, simply enter this command into the terminal
  `` python3 aligner_enclave.py <path to FASTA> ``
@@ -36,6 +39,9 @@ It receives encrypted reads in a protobuf format, searches for exact matches via
 ###### Running it
 To run it, simply enter this command into the terminal
  `` python3 aligner_cloud.py``
+
+###### Post-run
+After running the public cloud component, there will be a redis DB file. If you wish to remove it enter the command `` make clean ``
 
 ##### Client-side Component
 `` aligner_client.py ``

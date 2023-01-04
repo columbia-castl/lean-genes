@@ -1,3 +1,9 @@
 *.fna
 *.db
 *.fa
+bwa/
+*.amb
+*.ann
+*.bwt
+*.pac
+*.sa
