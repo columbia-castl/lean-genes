@@ -18,7 +18,8 @@ pubcloud_settings = dict(
 )
 
 enclave_settings = dict(
-    vsock_port = 5006
+    vsock_port = 5006,
+    bwa_path = "."
 )
 
 #CHR21 parameters 

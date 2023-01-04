@@ -8,6 +8,7 @@ import re
 import redis
 import socket
 import time
+import os
 
 from aligner_config import global_settings, enclave_settings, genome_params
 from Crypto.Random import get_random_bytes 
@@ -30,6 +31,9 @@ mode = "DEBUG"
 
 #After x hashes print progress
 progress_indicator = 5000000
+
+def trigger_bwa_indexing(bwa_path, fasta):
+    os.system(bwa_path + "/bwa index " + fasta + " &")
 
 def server_handler(port):
     server = VsockListener()
@@ -218,6 +222,7 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
             if unmatched_counter % batch_size == 0:
+                #IMMEDIATE TODO!!!
                 #WHERE BWA WILL BE CALLED [ os.system()? ]
                 print(unmatched_fastq)
                 unmatched_fastq = ""
@@ -253,8 +258,7 @@ def main():
    
     processed_ref = get_ref(fasta)
 
-    #Cloud-side operations   
-    #TODO: DONT HARDCODE THESE PARAMETERS 
+    #Cloud-side operations    
     while True:    
         try:
             redis_table = redis.Redis(host=global_settings["redis_ip"], port=global_settings["redis_port"], db=0, password='lean-genes-17',socket_connect_timeout=300)
@@ -268,6 +272,10 @@ def main():
         key = b'0' * 32
     else:
         key = get_random_bytes(32)    
+
+    #In background, allow BWA to index FASTA
+    bwa_path = enclave_settings["bwa_path"]
+    trigger_bwa_indexing(bwa_path, fasta)
 
     #Hash ref genome
     sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
