@@ -11,6 +11,7 @@ import time
 import os
 
 from aligner_config import global_settings, enclave_settings, genome_params
+from subprocess import Popen, PIPE, STDOUT
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
@@ -35,6 +36,17 @@ progress_indicator = 5000000
 def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "/bwa index " + fasta + " &")
+
+def dispatch_bwa(bwa_path, fasta, fastq):
+    print("Passing batched FASTQ to BWA...")
+    if debug: 
+        call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+    else:
+        call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+    stdout_data = call_bwa.communicate(input=fastq)[0]
+    
+    #print(stdout_data)
+    return stdout_data
 
 def server_handler(port):
     server = VsockListener()
@@ -190,7 +202,7 @@ def transfer_pmt(pmt, pmt_port, chrom_id=0):
     print(str(count_entries) + " PMT entries processed")
     return pmt_socket
 
-def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
+def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_path):
     unmatched_fastq = ""
     read_parser = Read()
 
@@ -223,10 +235,10 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size):
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
             if unmatched_counter % batch_size == 0:
-                #IMMEDIATE TODO!!!
-                #WHERE BWA WILL BE CALLED [ os.system()? ]
-                print(unmatched_fastq)
+                #WHERE BWA IS CALLED 
+                returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
                 unmatched_fastq = ""
+                
 
 def main():
 
@@ -285,7 +297,7 @@ def main():
     #Run server for receiving encrypted reads
     vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     vsock_socket.bind(('', vsock_port)) 
-    get_encrypted_reads(vsock_socket, serialized_read_size, batch_size)
+    get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta)
 
 if __name__ == "__main__":
     main()
