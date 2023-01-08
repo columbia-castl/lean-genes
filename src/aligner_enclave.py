@@ -15,9 +15,10 @@ from subprocess import Popen, PIPE, STDOUT
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
-from reads_pb2 import Read, PMT_Entry 
+from reads_pb2 import Read, Result, PMT_Entry 
 from vsock_handlers import VsockListener
 from google.protobuf.internal.encoder import _VarintBytes
+from enum import Enum
 
 #Global params to help with debug and test
 debug = False
@@ -33,6 +34,24 @@ mode = "DEBUG"
 #After x hashes print progress
 progress_indicator = 5000000
 
+class SamState(Enum):
+    PROCESSING_HEADER = 1
+    PROCESSING_READS = 2
+
+class SamReadFields(Enum):
+    qname = 1
+    flag = 2
+    rname = 3
+    pos = 4
+    mapq = 5
+    cigar = 6
+    rnext = 7
+    pnext = 8
+    tlen = 9
+    seq = 10
+    qual = 11
+    additional = 12
+
 def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "/bwa index " + fasta + " &")
@@ -45,9 +64,51 @@ def dispatch_bwa(bwa_path, fasta, fastq):
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
     
-    #print(stdout_data)
+    #print(str(stdout_data, 'utf-8'))
+    #print(type(stdout_data))
     return stdout_data
 
+def process_read(protobuffer, read_bytes):
+    if debug: 
+        print(read_bytes)
+    protobuffer.qname = read_bytes[0]   
+    protobuffer.flag = read_bytes[1] 
+    protobuffer.rname = read_bytes[2] 
+    protobuffer.pos = read_bytes[3] 
+    protobuffer.mapq = read_bytes[4] 
+    protobuffer.cigar = read_bytes[5] 
+    protobuffer.rnext = read_bytes[6] 
+    protobuffer.pnext = read_bytes[7] 
+    protobuffer.tlen = read_bytes[8] 
+    protobuffer.seq = read_bytes[9]   
+    protobuffer.qual = read_bytes[10] 
+    for i in range(11, len(read_bytes)): 
+        protobuffer.additional_fields += read_bytes[i] 
+
+#Parse a SAM into our protobuf structure
+def sam_sender(sam_data):
+    new_result = Result()
+    sam_lines = sam_data.split(b'\n')
+    sep_read = b''
+
+    PARSING_STATE = SamState.PROCESSING_HEADER
+    READ_STATE = SamReadFields.qname
+
+    for line in sam_lines:
+        if PARSING_STATE == SamState.PROCESSING_HEADER:
+            if line[0] == 64: #ASCII for @
+                new_result.sam_header += line
+            else:
+                sep_read = line.split(b'\t')
+                process_read(new_result, sep_read)
+                PARSING_STATE = SamState.PROCESSING_READS
+        elif PARSING_STATE == SamState.PROCESSING_READS:
+            sep_read = line.split(b'\t')
+            if (len(sep_read[0]) > 0):
+                process_read(new_result, sep_read)
+        else:
+            printf("ERROR: Unexpected SAM parsing state")
+        
 def server_handler(port):
     server = VsockListener()
     server.bind(port)
@@ -237,6 +298,7 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_pa
             if unmatched_counter % batch_size == 0:
                 #WHERE BWA IS CALLED 
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
+                sam_sender(returned_sam) 
                 unmatched_fastq = ""
                 
 

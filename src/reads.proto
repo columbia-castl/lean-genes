@@ -11,18 +11,18 @@ message Read {
 
 message Result {
 	optional bytes sam_header = 1;
-	required string qname = 2;
-	required string flag = 3;
-	required string rname = 4;
-	required string pos = 5;
-	required string mapq = 6;
-	required string cigar = 7;
-	required string rnext = 8;
-	required string pnext = 9;
-	required string tlen = 10;
-	required string seq = 11;
-	required string qual = 12;
-	optional string additional_fields = 13;
+	required bytes qname = 2;
+	required bytes flag = 3;
+	required bytes rname = 4;
+	required bytes pos = 5;
+	required bytes mapq = 6;
+	required bytes cigar = 7;
+	required bytes rnext = 8;
+	required bytes pnext = 9;
+	required bytes tlen = 10;
+	required bytes seq = 11;
+	required bytes qual = 12;
+	optional bytes additional_fields = 13;
 }
 
 message PMT_Entry {
