@@ -4,7 +4,7 @@ import socket
 import os
 
 from aligner_config import global_settings, pubcloud_settings, genome_params
-from reads_pb2 import Read, PMT_Entry
+from reads_pb2 import Read, PMT_Entry, Result
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from vsock_handlers import VsockStream
@@ -15,6 +15,7 @@ mode = "DEBUG"
 do_pmt_proxy = False
 
 unmatched_threshold = 0
+matched_threshold = 0
 
 def client_handler(args): 
     client = VsockStream() 
@@ -73,6 +74,8 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
     read_counter = 0
 
     exact_read_counter = 0
+    serialized_matches = []
+    serialized_unmatches = []
     unmatched_read_counter = 0
     unmatched_reads = []
 
@@ -98,7 +101,13 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
                 read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
                 if read_found != None:
                     print("Exact match read found.")
+                    #assemble SAM entry
                     exact_read_counter += 1
+                    if debug: 
+                        print("Match at: " + str(read_found, 'utf-8'))
+                    serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
+                    serialized_matches.append(serialized_match)
+                    print("\t-->Serialized match appended")
                 else:
                     print("Read was not exact match.")
                     unmatched_read_counter += 1
@@ -124,6 +133,26 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
 
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
+
+def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"unlabeled"):
+    new_result = Result()
+    new_result.qname = qname
+    new_result.flag = b'0'
+    new_result.rname = rname 
+    new_result.pos = pos
+    new_result.mapq = b'60'
+    new_result.cigar = b'*'
+    new_result.rnext = b'*'
+    new_result.pnext = b'0'
+    new_result.tlen = b'0'
+    new_result.seq = seq
+    new_result.qual = qual
+
+    return new_result.SerializeToString()
+        
+
+def aggregate_alignment_results():
+    pass
 
 def main():
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]

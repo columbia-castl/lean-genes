@@ -5,14 +5,16 @@ import re
 import socket
 import os
 import array
+import threading
 
 from aligner_config import global_settings, client_settings, genome_params
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 from enum import Enum
-from reads_pb2 import Read, PMT_Entry
+from reads_pb2 import Read, PMT_Entry, Result
 from google.protobuf.internal.decoder import _DecodeVarint32
+from _thread import *
 
 debug = False
 mode = "DEBUG"
@@ -26,9 +28,11 @@ class FastqState(Enum):
 
 PARSING_STATE = FastqState.READ_LABEL
 
+
 cipher_object = ""
 read_string = ""
 read_socket = ""
+
 
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
@@ -76,8 +80,8 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
         if PARSING_STATE == FastqState.READ_LABEL:
             if get_line[0] != "@":
-                printf("Error: Fastq is not formatted correctly.")
-                exit(1)
+                print("Error: Fastq is not formatted correctly.")
+                exit()
             else:
                 PARSING_STATE = FastqState.READ_CONTENT
 
@@ -107,12 +111,12 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
             else:
                 printf("Error: fastq is not formatted correctly.")
-                exit(1)
+                exit()
 
         elif PARSING_STATE == FastqState.DIV:
             if (get_line[0] != "+") or (len(get_line) > 2):
                 printf("Error: fastq is not formatted correctly.")
-                exit(1)
+                exit()
             else:
                 PARSING_STATE = FastqState.READ_QUALITY
 
@@ -138,9 +142,10 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
         else:
             printf("Error: bad fastq parsing state!")
-            exit(1)
+            exit()
 
     print(str(read_count) + " reads processed.")
+    #start_new_thread(process_alignment_results, (read_count,))
 
     return ref_loc
 
@@ -167,8 +172,45 @@ def send_read_wrapper(server_ip, read_port, filename):
     print("Parsing fastq...")
     send_reads(read_socket, crypto, hashkey, filename)
 
+def unpack_read(next_result, sam):
+    sam += (next_result.qname + "\t")
+    sam += (next_result.flag + "\t")
+    sam += (next_result.rname + "\t")
+    sam += (next_result.pos + "\t")
+    sam += (next_result.mapq + "\t")
+    sam += (next_result.cigar + "\t")
+    sam += (next_result.rnext + "\t")
+    sam += (next_result.pnext + "\t")
+    sam += (next_result.tlen + "\t")
+    sam += (next_result.seq + "\t")
+    sam += (next_result.qual + "\t")
+
+def process_alignment_results(num_reads): 
+    global pmt_socket
+    num_reads_processed = 0
+    sam = ""
+
+    while num_reads_processed < num_reads:
+        data = pmt_socket.recv(1024)
+        while data:
+            msg_len, size_len = _DecodeVarint32(data, 0)
+
+            while (size_len + msg_len > len(data)):
+                data += pmt_socket.recv(1024)
+            msg_buf = data[size_len: msg_len + size_len]
+
+            next_result = Result()
+            check_result = next_result.ParseFromString(msg_buf)
+               
+            unpack_read(next_result, sam)
+            num_reads_processed += 1
+
+        if not data:
+            break
+
 def main():
- 
+    global pmt_socket
+
     pmt_port = client_settings["pmt_port"]
     read_port = client_settings["read_port"]
     server_ip = client_settings["server_ip"]

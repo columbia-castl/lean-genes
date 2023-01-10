@@ -64,29 +64,28 @@ def dispatch_bwa(bwa_path, fasta, fastq):
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
     
-    #print(str(stdout_data, 'utf-8'))
+    print(str(stdout_data, 'utf-8'))
     #print(type(stdout_data))
     return stdout_data
 
 def process_read(protobuffer, read_bytes):
-    if debug: 
+    if debug:
         print(read_bytes)
-    protobuffer.qname = read_bytes[0]   
-    protobuffer.flag = read_bytes[1] 
-    protobuffer.rname = read_bytes[2] 
-    protobuffer.pos = read_bytes[3] 
-    protobuffer.mapq = read_bytes[4] 
-    protobuffer.cigar = read_bytes[5] 
-    protobuffer.rnext = read_bytes[6] 
-    protobuffer.pnext = read_bytes[7] 
-    protobuffer.tlen = read_bytes[8] 
-    protobuffer.seq = read_bytes[9]   
-    protobuffer.qual = read_bytes[10] 
+    protobuffer.qname = read_bytes[0]
+    protobuffer.flag = read_bytes[1]
+    protobuffer.rname = read_bytes[2]
+    protobuffer.pos = read_bytes[3]
+    protobuffer.mapq = read_bytes[4]
+    protobuffer.cigar = read_bytes[5]
+    protobuffer.rnext = read_bytes[6]
+    protobuffer.pnext = read_bytes[7]
+    protobuffer.tlen = read_bytes[8]
+    protobuffer.seq = read_bytes[9]
+    protobuffer.qual = read_bytes[10]
     for i in range(11, len(read_bytes)): 
-        protobuffer.additional_fields += read_bytes[i] 
+        protobuffer.additional_fields += read_bytes[i]
 
-#Parse a SAM into our protobuf structure
-def sam_sender(sam_data):
+def sam_sender(sam_data, conn):
     new_result = Result()
     sam_lines = sam_data.split(b'\n')
     sep_read = b''
@@ -101,6 +100,7 @@ def sam_sender(sam_data):
             else:
                 sep_read = line.split(b'\t')
                 process_read(new_result, sep_read)
+                conn.send(new_result.SerializeToString())
                 PARSING_STATE = SamState.PROCESSING_READS
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
@@ -109,6 +109,7 @@ def sam_sender(sam_data):
         else:
             printf("ERROR: Unexpected SAM parsing state")
         
+       
 def server_handler(port):
     server = VsockListener()
     server.bind(port)
@@ -298,7 +299,7 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_pa
             if unmatched_counter % batch_size == 0:
                 #WHERE BWA IS CALLED 
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
-                sam_sender(returned_sam) 
+                sam_sender(returned_sam, conn) 
                 unmatched_fastq = ""
                 
 
