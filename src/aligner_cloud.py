@@ -2,16 +2,17 @@ import sys
 import redis
 import socket
 import os
+import threading
 
 from aligner_config import global_settings, pubcloud_settings, genome_params
 from reads_pb2 import Read, PMT_Entry, Result
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from _thread import *
 from vsock_handlers import VsockStream
 
 debug = False
 mode = "DEBUG"
-
 do_pmt_proxy = False
 
 unmatched_threshold = 0
@@ -151,8 +152,23 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"unlabeled"
     return new_result.SerializeToString()
         
 
-def aggregate_alignment_results():
-    pass
+def aggregate_alignment_results(bwa_socket, client_result_socket):
+    #Initiate result transfer by enclave
+    bwa_socket.listen()
+    conn, addr = bwa_socket.accept()
+
+    result_source = True
+    num_in_batch = 0
+
+    while (num_in_batch < pubcloud_settings["AGGREGATE_BATCH_SIZE"]):
+        client_result_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["bwa_port"]))
+        
+        if result_source: #Source: enclave cloud
+            client_result_socket.send(bwa_socket.recv(genome_settings["SERIALIZED_RESULT_SIZE"]))
+        else: #Source: exact match
+            client_result_socket.send(serialized_matches.pop())
+
+        result_source = not result_source
 
 def main():
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
@@ -162,6 +178,12 @@ def main():
     pmt_client_port = pubcloud_settings["pmt_client_port"]
     vsock_port = pubcloud_settings["vsock_port"]
     redis_port = global_settings["redis_port"]
+    bwa_port = pubcloud_settings["bwa_port"]
+
+    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    bwa_socket.bind(('', bwa_port))
+
+    result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
