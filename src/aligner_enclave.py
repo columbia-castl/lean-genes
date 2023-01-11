@@ -30,6 +30,7 @@ hash_limit = 100
 limit_lines = False
 line_limit = 100
 mode = "DEBUG"
+bwa_socket = ""
 
 #After x hashes print progress
 progress_indicator = 5000000
@@ -85,10 +86,14 @@ def process_read(protobuffer, read_bytes):
     for i in range(11, len(read_bytes)): 
         protobuffer.additional_fields += read_bytes[i]
 
-def sam_sender(sam_data, conn):
+def sam_sender(sam_data):
+    global bwa_socket
+
     new_result = Result()
     sam_lines = sam_data.split(b'\n')
     sep_read = b''
+
+    bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
     PARSING_STATE = SamState.PROCESSING_HEADER
     READ_STATE = SamReadFields.qname
@@ -100,7 +105,7 @@ def sam_sender(sam_data, conn):
             else:
                 sep_read = line.split(b'\t')
                 process_read(new_result, sep_read)
-                conn.send(new_result.SerializeToString())
+                bwa_socket.send(new_result.SerializeToString())
                 PARSING_STATE = SamState.PROCESSING_READS
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
@@ -244,9 +249,9 @@ def gen_permutation(ref_length, read_size):
         permutation[i], permutation[j] = permutation[j], permutation[i]
     return permutation
 
-def transfer_pmt(pmt, pmt_port, chrom_id=0):    
+def transfer_pmt(pmt, chrom_id=0):    
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    pmt_socket.connect(('3.87.229.175', pmt_port)) 
+    pmt_socket.connect((enclave_settings["server_ip"], enclave_settings["pmt_port"])) 
     pmt_entry = PMT_Entry()
     count_entries = 0
     for entry in pmt:
@@ -299,11 +304,12 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_pa
             if unmatched_counter % batch_size == 0:
                 #WHERE BWA IS CALLED 
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
-                sam_sender(returned_sam, conn) 
+                sam_sender(returned_sam) 
                 unmatched_fastq = ""
                 
 
 def main():
+    global bwa_socket
 
     ref_length = genome_params["REF_LENGTH"]
     read_length = genome_params["READ_LENGTH"]
@@ -312,6 +318,9 @@ def main():
 
     #Network parameters
     vsock_port = enclave_settings["vsock_port"]
+    bwa_port = enclave_settings["bwa_port"]
+
+    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     print("Generate PMT permutation")
     pmt = gen_permutation(ref_length, read_length)
@@ -320,7 +329,7 @@ def main():
     if pmt_transfer:
         #Send PMT
         print("Transferring PMT via proxy...")    
-        vsock_socket = transfer_pmt(pmt, vsock_port)
+        vsock_socket = transfer_pmt(pmt)
         vsock_socket.close()
 
         #TODO: This is janky, change this

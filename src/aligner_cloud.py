@@ -4,19 +4,23 @@ import socket
 import os
 import threading
 
-from aligner_config import global_settings, pubcloud_settings, genome_params
+from aligner_config import global_settings, pubcloud_settings, genome_params, leangenes_params
 from reads_pb2 import Read, PMT_Entry, Result
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from _thread import *
+from google.protobuf.internal.encoder import _VarintBytes
 from vsock_handlers import VsockStream
 
 debug = False
 mode = "DEBUG"
 do_pmt_proxy = False
 
-unmatched_threshold = 0
-matched_threshold = 0
+bwa_socket = ""
+result_socket = ""
+
+serialized_matches = []
+serialized_unmatches = []
 
 def client_handler(args): 
     client = VsockStream() 
@@ -65,6 +69,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     return proxy_socket
 
 def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read_size, crypto, redis_table):
+    global serialized_matches, serialized_unmatches
 
     read_parser = Read()
 
@@ -87,7 +92,7 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
         while True:
             data = conn.recv(serialized_read_size)
             read_counter += 1
-
+            
             if debug:
                 print("-->received data " + str(read_counter))
             
@@ -114,8 +119,8 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
-            if len(unmatched_reads) > unmatched_threshold: 
-                if unmatched_read_counter == unmatched_threshold + 1: 
+            if len(unmatched_reads) > leangenes_params["unmatched_threshold"]: 
+                if unmatched_read_counter == leangenes_params["unmatched_threshold"] + 1: 
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], unmatched_port)) 
                 if debug:
                     print("Len of unmatched reads: " + str(len(unmatched_reads)))
@@ -131,7 +136,10 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
             
             if not data:
                 break
-
+        
+        #start_new_thread(aggregate_alignment_results, (len(unmatched_reads), len(serialized_matches),))
+        start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
+    
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
@@ -149,28 +157,46 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"unlabeled"
     new_result.seq = seq
     new_result.qual = qual
 
-    return new_result.SerializeToString()
+    return (_VarintBytes(new_result.ByteSize()), new_result.SerializeToString())
         
 
-def aggregate_alignment_results(bwa_socket, client_result_socket):
+def aggregate_alignment_results(num_unmatched, num_matched):
+    global bwa_socket, result_socket, serialized_matches
+
+    if (num_unmatched == 0) and (num_matched == 0):
+        return True
+
+    #if debug:
+    print("-->Aggregator thread initiated")
+    print("-->Aggregator called with (" + str(num_unmatched) + "," + str(num_matched) + ")")
+
     #Initiate result transfer by enclave
-    bwa_socket.listen()
-    conn, addr = bwa_socket.accept()
+    if num_unmatched > 0:
+        bwa_socket.listen()
+        conn, addr = bwa_socket.accept()
+        print("BWA SOCKET CONNECTS SUCCESSFULLY")
 
-    result_source = True
-    num_in_batch = 0
+    matched_aggregate = 0
+    unmatched_aggregate = 0
+    
+    result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
+    print("-->Aggregator sending data!") 
+    while (unmatched_aggregate < num_unmatched):
+        result_socket.send(bwa_socket.recv(genome_settings["SERIALIZED_RESULT_SIZE"]))
+        unmatched_aggregate += 1
+    
+    while (matched_aggregate < num_matched):
+        match_buf = serialized_matches.pop()
+        result_socket.send(match_buf[0]) 
+        result_socket.send(match_buf[1])
+        print(match_buf[1])
+        matched_aggregate += 1
 
-    while (num_in_batch < pubcloud_settings["AGGREGATE_BATCH_SIZE"]):
-        client_result_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["bwa_port"]))
-        
-        if result_source: #Source: enclave cloud
-            client_result_socket.send(bwa_socket.recv(genome_settings["SERIALIZED_RESULT_SIZE"]))
-        else: #Source: exact match
-            client_result_socket.send(serialized_matches.pop())
-
-        result_source = not result_source
+    return True
 
 def main():
+    global bwa_socket, result_socket
+
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network params
