@@ -185,13 +185,15 @@ def unpack_read(next_result, sam):
     sam += (next_result.seq + b"\t")
     sam += (bytes(next_result.qual, 'utf-8') + b"\t")
 
+    return sam
+
 def process_alignment_results(num_reads): 
     global result_socket
 
     print("Result socket waiting...")
 
     #Wait for results
-    result_socket.listen()
+    result_socket.listen(5)
     conn, addr = result_socket.accept()
     print("Processing thread receives connection!")
 
@@ -203,8 +205,8 @@ def process_alignment_results(num_reads):
         while data != b'':
             msg_len, size_len = _DecodeVarint32(data, 0)
 
-            print("msg_len " + str(msg_len))
-            print("size_len " + str(size_len))
+            #print("msg_len " + str(msg_len))
+            #print("size_len " + str(size_len))
 
             #while (size_len + msg_len > len(data)):
             #    data += result_socket.recv(1024)
@@ -213,7 +215,7 @@ def process_alignment_results(num_reads):
             next_result = Result()
             check_result = next_result.ParseFromString(msg_buf)
                
-            unpack_read(next_result, sam)
+            sam = unpack_read(next_result, sam)
             print(sam) 
             num_reads_processed += 1
 
@@ -221,6 +223,8 @@ def process_alignment_results(num_reads):
 
         if not data:
             break
+
+    conn.close()
 
 def main():
     global result_socket

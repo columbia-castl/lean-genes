@@ -17,7 +17,6 @@ mode = "DEBUG"
 do_pmt_proxy = False
 
 bwa_socket = ""
-result_socket = ""
 
 serialized_matches = []
 serialized_unmatches = []
@@ -161,7 +160,9 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"unlabeled"
         
 
 def aggregate_alignment_results(num_unmatched, num_matched):
-    global bwa_socket, result_socket, serialized_matches
+    global bwa_socket, serialized_matches
+
+    result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if (num_unmatched == 0) and (num_matched == 0):
         return True
@@ -192,10 +193,12 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         print(match_buf[1])
         matched_aggregate += 1
 
+    result_socket.close()
+
     return True
 
 def main():
-    global bwa_socket, result_socket
+    global bwa_socket
 
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
@@ -209,7 +212,6 @@ def main():
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.bind(('', bwa_port))
 
-    result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
