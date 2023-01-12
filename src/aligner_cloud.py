@@ -10,6 +10,7 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from _thread import *
 from google.protobuf.internal.encoder import _VarintBytes
+from google.protobuf.internal.decoder import _DecodeVarint32
 from vsock_handlers import VsockStream
 
 debug = False
@@ -67,7 +68,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     pmt_client_socket.close()
     return proxy_socket
 
-def receive_reads(unmatched_socket, serialized_read_size, crypto, redis_table):
+def receive_reads(serialized_read_size, crypto, redis_table):
     global serialized_matches, serialized_unmatches
 
     read_parser = Read()
@@ -120,6 +121,7 @@ def receive_reads(unmatched_socket, serialized_read_size, crypto, redis_table):
 
             if len(unmatched_reads) > leangenes_params["unmatched_threshold"]: 
                 if unmatched_read_counter == leangenes_params["unmatched_threshold"] + 1: 
+                    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                 if debug:
                     print("Len of unmatched reads: " + str(len(unmatched_reads)))
@@ -135,6 +137,8 @@ def receive_reads(unmatched_socket, serialized_read_size, crypto, redis_table):
             
             if not data:
                 break
+
+        unmatched_socket.close()
         
         start_new_thread(aggregate_alignment_results, (unmatched_read_counter, exact_read_counter,))
         #start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
@@ -193,12 +197,27 @@ def aggregate_alignment_results(num_unmatched, num_matched):
 
         print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
 
-        result_data = 1
-        #IMMEDIATE TODO: SPLIT SEND INTO TWO PORTIONS
-        while (result_data != b''):
-            result_data = conn.recv(1024)
-            print(result_data)
-            conn.send(result_data)
+        get_size = True
+        read_pair = []
+        read_size = 0
+        data = conn.recv(1024)
+        while data != b'':
+            msg_len, size_len = _DecodeVarint32(data, 0)
+            print(str(msg_len) + " msg len")
+
+            if (msg_len + size_len > len(data)):
+                data += conn.recv(1024)
+                continue
+
+            #Send a single read back to client
+            conn.send(data[0:msg_len+size_len])
+            print("Unmatched read sent.")
+
+            data = data[msg_len + size_len:]
+            print("Data POST SEND")
+            print(data)
+
+        conn.close()
         
     result_socket.close()
 
@@ -234,7 +253,7 @@ def main():
     run_redis_server()
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
-    receive_reads(proxy_socket, serialized_read_size, crypto, redis_table)
+    receive_reads(serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
     main()

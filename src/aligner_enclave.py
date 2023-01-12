@@ -30,7 +30,6 @@ hash_limit = 100
 limit_lines = False
 line_limit = 100
 mode = "DEBUG"
-bwa_socket = ""
 
 #After x hashes print progress
 progress_indicator = 5000000
@@ -64,7 +63,7 @@ def dispatch_bwa(bwa_path, fasta, fastq):
     else:
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
-    
+
     print(str(stdout_data, 'utf-8'))
     #print(type(stdout_data))
     return stdout_data
@@ -86,15 +85,16 @@ def process_read(protobuffer, read_bytes):
     for i in range(11, len(read_bytes)): 
         protobuffer.additional_fields += read_bytes[i]
 
+    print("Read size: " + str(protobuffer.ByteSize()))
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
 def sam_sender(sam_data):
-    global bwa_socket
 
     new_result = Result()
     sam_lines = sam_data.split(b'\n')
     sep_read = b''
 
+    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
     PARSING_STATE = SamState.PROCESSING_HEADER
@@ -110,6 +110,10 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
+
+                print("----> Sending result")
+                print(result_tuple)
+
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
             if (len(sep_read[0]) > 0):
@@ -117,10 +121,14 @@ def sam_sender(sam_data):
                 result_tuple = process_read(new_result, sep_read)
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
+
+                print("----> Sending result")
+                print(result_tuple)
         else:
             printf("ERROR: Unexpected SAM parsing state")
-        
-       
+
+    bwa_socket.close()
+
 def server_handler(port):
     server = VsockListener()
     server.bind(port)
@@ -128,10 +136,10 @@ def server_handler(port):
 
 def get_ref(ref_file_path):
     print("\nRetrieve reference file at path " + ref_file_path)
-    
+
     ref_file = open(ref_file_path, "r")
     full_ref = ref_file.readlines() 
-  
+
     ref_file.close()
     return full_ref
 
@@ -141,7 +149,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
     hashes_generated = 0
     lines_processed = 0
     chrom_counter = 0
-   
+
     #Data structure initialization
     hash_buffer = b''
     end_hashing = False
@@ -170,13 +178,13 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             hash_buffer = b''
             print(">>>Processing next chromosome")
             continue
-        
+
         # Filter out full lines of N bases
         elif load_line == ('N' * len(load_line)):
             lines_processed += 1
             continue
-        
-        # Default case: Load line into hash buffer
+
+            # Default case: Load line into hash buffer
         else:
             hash_buffer += bytes(load_line, 'utf-8')
 
@@ -187,7 +195,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             if debug: 
                 print("Hashing window: ")
                 print(hash_buffer[0:read_size])
-            
+
             newhash = hmac.new(key, hash_buffer[0:read_size], hashlib.sha256)
             curr_hash = newhash.digest()
 
@@ -210,7 +218,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
 
             if debug:
                 print(curr_hash)
-           
+
             hashes_generated += 1
             hash_buffer = hash_buffer[1:]          
 
@@ -222,10 +230,10 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
                 print(hashes_generated)
 
         lines_processed += 1
-        
+
         if limit_lines and (lines_processed > line_limit):
             break
-    
+
     #Final pipeline flush
     while True:
         try:
@@ -239,7 +247,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
                 print("Redis connection error... Trying again.")
                 sleep(10)
     #print(redis_response)
-    
+
     print("\n*******************************************")
     print(str(hashes_generated) + " hashes generated")
     print(str(lines_processed) + " lines processed") 
@@ -291,17 +299,17 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         unmatched_counter = 0
 
         data = 1 
-        while data:
+        while data != b'':
             if debug:
                 print("-->received unmatched read from cloud")
-        
+
             unmatched_counter += 1
-        
+
             data = conn.recv(serialized_read_size)
             check_read = read_parser.ParseFromString(data)
-            
+
             unmatched_fastq += (anonymized_label + "\n")
-            
+
             read_size = genome_params["READ_LENGTH"]
             unmatched_fastq += str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8') + "\n"
             unmatched_fastq += "+\n"
@@ -312,13 +320,12 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
                 sam_sender(returned_sam) 
                 unmatched_fastq = ""
-        
+
         conn.close()                
-            
+
 
 def main():
-    global bwa_socket
-
+    
     ref_length = genome_params["REF_LENGTH"]
     read_length = genome_params["READ_LENGTH"]
     batch_size = genome_params["BATCH_SIZE"]	
@@ -327,8 +334,6 @@ def main():
     #Network parameters
     unmatched_port = enclave_settings["vsock_port"]
     bwa_port = enclave_settings["bwa_port"]
-
-    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     print("Generate PMT permutation")
     pmt = gen_permutation(ref_length, read_length)
