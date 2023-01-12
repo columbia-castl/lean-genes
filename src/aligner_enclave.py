@@ -86,6 +86,8 @@ def process_read(protobuffer, read_bytes):
     for i in range(11, len(read_bytes)): 
         protobuffer.additional_fields += read_bytes[i]
 
+    return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
+
 def sam_sender(sam_data):
     global bwa_socket
 
@@ -104,13 +106,16 @@ def sam_sender(sam_data):
                 new_result.sam_header += line
             else:
                 sep_read = line.split(b'\t')
-                process_read(new_result, sep_read)
-                bwa_socket.send(new_result.SerializeToString())
+                result_tuple = process_read(new_result, sep_read)
+                bwa_socket.send(result_tuple[0])
+                bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
             if (len(sep_read[0]) > 0):
-                process_read(new_result, sep_read)
+                result_tuple = process_read(new_result, sep_read)
+                bwa_socket.send(result_tuple[0])
+                bwa_socket.send(result_tuple[1])
         else:
             printf("ERROR: Unexpected SAM parsing state")
         
@@ -269,15 +274,15 @@ def transfer_pmt(pmt, chrom_id=0):
     print(str(count_entries) + " PMT entries processed")
     return pmt_socket
 
-def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_path):
+def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta_path):
     unmatched_fastq = ""
     read_parser = Read()
 
     anonymized_label = "@unlabeled"
 
     while True: 
-        vsock_socket.listen()
-        conn, addr = vsock_socket.accept()
+        unmatched_socket.listen()
+        conn, addr = unmatched_socket.accept()
 
         #TODO: Real crypto key management
         crypto_key = b'0' * 32
@@ -306,7 +311,9 @@ def get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta_pa
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
                 sam_sender(returned_sam) 
                 unmatched_fastq = ""
-                
+        
+        conn.close()                
+            
 
 def main():
     global bwa_socket
@@ -317,7 +324,7 @@ def main():
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network parameters
-    vsock_port = enclave_settings["vsock_port"]
+    unmatched_port = enclave_settings["vsock_port"]
     bwa_port = enclave_settings["bwa_port"]
 
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -329,8 +336,8 @@ def main():
     if pmt_transfer:
         #Send PMT
         print("Transferring PMT via proxy...")    
-        vsock_socket = transfer_pmt(pmt)
-        vsock_socket.close()
+        unmatched_socket = transfer_pmt(pmt)
+        unmatched_socket.close()
 
         #TODO: This is janky, change this
         time.sleep(30)
@@ -367,9 +374,9 @@ def main():
     sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
     #Run server for receiving encrypted reads
-    vsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    vsock_socket.bind(('', vsock_port)) 
-    get_encrypted_reads(vsock_socket, serialized_read_size, batch_size, fasta)
+    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    unmatched_socket.bind(('', unmatched_port)) 
+    get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta)
 
 if __name__ == "__main__":
     main()

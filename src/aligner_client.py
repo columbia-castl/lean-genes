@@ -216,8 +216,10 @@ def process_alignment_results(num_reads):
             check_result = next_result.ParseFromString(msg_buf)
                
             sam = unpack_read(next_result, sam)
-            print(sam) 
             num_reads_processed += 1
+
+            #print(sam)
+            print(str(num_reads_processed) + " reads processed")
 
             data = data[msg_len + size_len:]
 

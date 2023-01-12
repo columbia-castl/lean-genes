@@ -18,7 +18,7 @@ pubcloud_settings = dict(
     read_port = 4444,
     pmt_client_port = 4445,
     result_port = 4446,
-    vsock_port = 5006,
+    unmatched_port = 5006,
     bwa_port = 5007,
 )
 

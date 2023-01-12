@@ -67,7 +67,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     pmt_client_socket.close()
     return proxy_socket
 
-def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read_size, crypto, redis_table):
+def receive_reads(unmatched_socket, serialized_read_size, crypto, redis_table):
     global serialized_matches, serialized_unmatches
 
     read_parser = Read()
@@ -75,7 +75,7 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
     #Use read size to calc expected bytes for a read
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #client_socket.settimeout(30)
-    client_socket.bind(('', client_port))
+    client_socket.bind(('', pubcloud_settings["read_port"]))
     read_counter = 0
 
     exact_read_counter = 0
@@ -120,7 +120,7 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
 
             if len(unmatched_reads) > leangenes_params["unmatched_threshold"]: 
                 if unmatched_read_counter == leangenes_params["unmatched_threshold"] + 1: 
-                    unmatched_socket.connect((pubcloud_settings["enclave_ip"], unmatched_port)) 
+                    unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                 if debug:
                     print("Len of unmatched reads: " + str(len(unmatched_reads)))
                 for read in unmatched_reads:
@@ -136,8 +136,11 @@ def receive_reads(client_port, unmatched_socket, unmatched_port, serialized_read
             if not data:
                 break
         
-        #start_new_thread(aggregate_alignment_results, (len(unmatched_reads), len(serialized_matches),))
-        start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
+        start_new_thread(aggregate_alignment_results, (unmatched_read_counter, exact_read_counter,))
+        #start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
+
+        unmatched_read_counter = 0
+        exact_read_counter = 0
     
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
@@ -171,21 +174,11 @@ def aggregate_alignment_results(num_unmatched, num_matched):
     print("-->Aggregator thread initiated")
     print("-->Aggregator called with (" + str(num_unmatched) + "," + str(num_matched) + ")")
 
-    #Initiate result transfer by enclave
-    if num_unmatched > 0:
-        bwa_socket.listen()
-        conn, addr = bwa_socket.accept()
-        print("BWA SOCKET CONNECTS SUCCESSFULLY")
-
     matched_aggregate = 0
-    unmatched_aggregate = 0
     
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
     print("-->Aggregator sending data!") 
-    while (unmatched_aggregate < num_unmatched):
-        result_socket.send(bwa_socket.recv(genome_settings["SERIALIZED_RESULT_SIZE"]))
-        unmatched_aggregate += 1
-    
+
     while (matched_aggregate < num_matched):
         match_buf = serialized_matches.pop()
         result_socket.send(match_buf[0]) 
@@ -193,6 +186,19 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         print(match_buf[1])
         matched_aggregate += 1
 
+    #Initiate result transfer by enclave
+    if num_unmatched > 0:
+        bwa_socket.listen()
+        conn, addr = bwa_socket.accept()
+
+        print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
+
+        result_data = 1
+        while (result_data != b''):
+            result_data = conn.recv(1024)
+            print(result_data)
+            conn.send(result_data)
+        
     result_socket.close()
 
     return True
@@ -205,13 +211,12 @@ def main():
     #Network params
     read_port = pubcloud_settings["read_port"]
     pmt_client_port = pubcloud_settings["pmt_client_port"]
-    vsock_port = pubcloud_settings["vsock_port"]
+    unmatched_port = pubcloud_settings["unmatched_port"]
     redis_port = global_settings["redis_port"]
     bwa_port = pubcloud_settings["bwa_port"]
 
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.bind(('', bwa_port))
-
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
@@ -221,14 +226,14 @@ def main():
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
     if do_pmt_proxy: 
-        proxy_socket = pmt_proxy(vsock_port, pmt_client_port)
+        proxy_socket = pmt_proxy(unmatched_port, pmt_client_port)
     else:
         proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     
     run_redis_server()
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
-    receive_reads(read_port, proxy_socket, vsock_port, serialized_read_size, crypto, redis_table)
+    receive_reads(proxy_socket, serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
     main()
