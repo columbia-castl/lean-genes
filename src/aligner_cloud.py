@@ -182,14 +182,6 @@ def aggregate_alignment_results(num_unmatched, num_matched):
     
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
     print("-->Aggregator sending data!") 
-
-    while (matched_aggregate < num_matched):
-        match_buf = serialized_matches.pop()
-        result_socket.send(match_buf[0]) 
-        result_socket.send(match_buf[1])
-        print(match_buf[1])
-        matched_aggregate += 1
-
     #Initiate result transfer by enclave
     if num_unmatched > 0:
         bwa_socket.listen()
@@ -197,7 +189,6 @@ def aggregate_alignment_results(num_unmatched, num_matched):
 
         print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
 
-        get_size = True
         read_pair = []
         read_size = 0
         data = conn.recv(1024)
@@ -210,15 +201,23 @@ def aggregate_alignment_results(num_unmatched, num_matched):
                 continue
 
             #Send a single read back to client
-            conn.send(data[0:msg_len+size_len])
+            result_socket.send(data[0:msg_len+size_len])
             print("Unmatched read sent.")
 
             data = data[msg_len + size_len:]
+
             print("Data POST SEND")
             print(data)
 
         conn.close()
-        
+
+    while (matched_aggregate < num_matched):
+        match_buf = serialized_matches.pop()
+        result_socket.send(match_buf[0]) 
+        result_socket.send(match_buf[1])
+        print(match_buf[1])
+        matched_aggregate += 1
+
     result_socket.close()
 
     return True

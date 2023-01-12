@@ -200,25 +200,20 @@ def process_alignment_results(num_reads):
     num_reads_processed = 0
     sam = b""
 
-    read_size = True
-
-    data = 1 
-    while True:
-
-        if read_size:
-            size = conn.recv(1)
-            if size == b'':
-                break
+    while num_reads_processed < num_reads:
+        data = conn.recv(1024) 
+        while data:
+            msg_len, size_len = _DecodeVarint32(data, 0)
 
             print("--------Size:")
-            msg_len, size_len = _DecodeVarint32(size, 0)
             print(msg_len)
-            
-            read_size = not read_size
-      
-        else:
+
+            if (msg_len + size_len > len(data)):
+                data += conn.recv(1024)
+                continue
+
             print("-------Result:")
-            result = conn.recv(msg_len)
+            result = data[size_len: size_len + msg_len]
             print(result)
             
             next_result = Result()
@@ -229,9 +224,11 @@ def process_alignment_results(num_reads):
             num_reads_processed += 1
             print(str(num_reads_processed) + " reads processed")
 
-            read_size = not read_size
+            data = data[size_len + msg_len:]
+        #data = conn.recv(1024)
 
-    print(sam)
+    print("FULL SAM") 
+    print(str(sam, 'utf-8'))
     conn.close()
 
 def main():
