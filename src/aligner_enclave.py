@@ -113,6 +113,7 @@ def sam_sender(sam_data):
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
             if (len(sep_read[0]) > 0):
+                new_result.sam_header = b''
                 result_tuple = process_read(new_result, sep_read)
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
@@ -281,7 +282,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
     anonymized_label = "@unlabeled"
 
     while True: 
-        unmatched_socket.listen()
+        unmatched_socket.listen(5)
         conn, addr = unmatched_socket.accept()
 
         #TODO: Real crypto key management

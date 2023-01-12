@@ -200,32 +200,38 @@ def process_alignment_results(num_reads):
     num_reads_processed = 0
     sam = b""
 
-    while num_reads_processed < num_reads:
-        data = conn.recv(1024)
-        while data != b'':
-            msg_len, size_len = _DecodeVarint32(data, 0)
+    read_size = True
 
-            #print("msg_len " + str(msg_len))
-            #print("size_len " + str(size_len))
+    data = 1 
+    while True:
 
-            #while (size_len + msg_len > len(data)):
-            #    data += result_socket.recv(1024)
-            msg_buf = data[size_len: msg_len + size_len]
+        if read_size:
+            size = conn.recv(1)
+            if size == b'':
+                break
 
+            print("--------Size:")
+            msg_len, size_len = _DecodeVarint32(size, 0)
+            print(msg_len)
+            
+            read_size = not read_size
+      
+        else:
+            print("-------Result:")
+            result = conn.recv(msg_len)
+            print(result)
+            
             next_result = Result()
-            check_result = next_result.ParseFromString(msg_buf)
-               
+            check_result = next_result.ParseFromString(result)
+        
             sam = unpack_read(next_result, sam)
+            
             num_reads_processed += 1
-
-            #print(sam)
             print(str(num_reads_processed) + " reads processed")
 
-            data = data[msg_len + size_len:]
+            read_size = not read_size
 
-        if not data:
-            break
-
+    print(sam)
     conn.close()
 
 def main():

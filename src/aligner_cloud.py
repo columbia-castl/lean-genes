@@ -194,6 +194,7 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
 
         result_data = 1
+        #IMMEDIATE TODO: SPLIT SEND INTO TWO PORTIONS
         while (result_data != b''):
             result_data = conn.recv(1024)
             print(result_data)
