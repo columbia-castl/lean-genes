@@ -128,6 +128,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 for read in unmatched_reads:
                     unmatched_socket.send(read)
                 unmatched_reads.clear()
+                unmatched_socket.close()
 
             if debug:
                 print("Data: ")
@@ -138,7 +139,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if not data:
                 break
 
-        unmatched_socket.close()
+        #unmatched_socket.close()
         
         start_new_thread(aggregate_alignment_results, (unmatched_read_counter, exact_read_counter,))
         #start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
@@ -149,7 +150,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
-def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"unlabeled"):
+def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"*"):
     new_result = Result()
     new_result.qname = qname
     new_result.flag = b'0'

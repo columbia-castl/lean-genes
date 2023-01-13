@@ -126,7 +126,7 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
             else:
                 qual_bytes = bytes(get_line[:-1], 'utf-8')
                 qual_string = get_line[:-1]
-                while len(qual_bytes) % AES_BLOCK_SIZE != 0:
+                while len(qual_bytes) % leangenes_params["AES_BLOCK_SIZE"] != 0:
                     qual_bytes += b'0'
 
                 #TODO: proper handling of quality encryption
@@ -143,9 +143,12 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
             printf("Error: bad fastq parsing state!")
             exit()
 
+    crypto_key = b'0' * 32
+    crypto = AES.new(crypto_key, AES.MODE_ECB)
+
     print(str(read_count) + " reads processed.")
     print("\t-->Initiate result processing thread") 
-    start_new_thread(process_alignment_results, (read_count,))
+    start_new_thread(process_alignment_results, (read_count,crypto,))
 
     return ref_loc
 
@@ -172,7 +175,8 @@ def send_read_wrapper(server_ip, read_port, filename):
     print("Parsing fastq...")
     send_reads(read_socket, crypto, hashkey, filename)
 
-def unpack_read(next_result, sam):
+def unpack_read(next_result, crypto):
+    sam = b''
     sam += (next_result.qname + b"\t")
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
@@ -182,12 +186,12 @@ def unpack_read(next_result, sam):
     sam += (next_result.rnext + b"\t")
     sam += (next_result.pnext + b"\t")
     sam += (next_result.tlen + b"\t")
-    sam += (next_result.seq + b"\t")
+    sam += (crypto.decrypt(next_result.seq)[:genome_params["READ_LENGTH"]] + b"\t")
     sam += (bytes(next_result.qual, 'utf-8') + b"\t")
 
     return sam
 
-def process_alignment_results(num_reads): 
+def process_alignment_results(num_reads, crypto): 
     global result_socket
 
     print("Result socket waiting...")
@@ -205,30 +209,38 @@ def process_alignment_results(num_reads):
         while data:
             msg_len, size_len = _DecodeVarint32(data, 0)
 
-            print("--------Size:")
-            print(msg_len)
+            if debug:
+                print("--------Size:")
+                print(msg_len)
 
             if (msg_len + size_len > len(data)):
                 data += conn.recv(1024)
                 continue
 
-            print("-------Result:")
             result = data[size_len: size_len + msg_len]
-            print(result)
+            if debug: 
+                print("-------Result:")
+                print(result)
             
             next_result = Result()
             check_result = next_result.ParseFromString(result)
         
-            sam = unpack_read(next_result, sam)
-            
+            add_to_sam = unpack_read(next_result, crypto)
+            if debug: 
+                print("BYTES")
+                print(add_to_sam) 
+            print("STR")
+            print(str(add_to_sam, 'utf-8'))           
+
             num_reads_processed += 1
             print(str(num_reads_processed) + " reads processed")
 
+            sam += add_to_sam
             data = data[size_len + msg_len:]
         #data = conn.recv(1024)
 
     print("FULL SAM") 
-    print(str(sam, 'utf-8'))
+    print(sam)
     conn.close()
 
 def main():

@@ -10,7 +10,7 @@ import socket
 import time
 import os
 
-from aligner_config import global_settings, enclave_settings, genome_params
+from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params
 from subprocess import Popen, PIPE, STDOUT
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
@@ -33,6 +33,7 @@ mode = "DEBUG"
 
 #After x hashes print progress
 progress_indicator = 5000000
+pmt = []
 
 class SamState(Enum):
     PROCESSING_HEADER = 1
@@ -68,19 +69,26 @@ def dispatch_bwa(bwa_path, fasta, fastq):
     #print(type(stdout_data))
     return stdout_data
 
-def process_read(protobuffer, read_bytes):
+def process_read(protobuffer, read_bytes, crypto):
+    global pmt
+
     if debug:
         print(read_bytes)
     protobuffer.qname = read_bytes[0]
     protobuffer.flag = read_bytes[1]
     protobuffer.rname = read_bytes[2]
-    protobuffer.pos = read_bytes[3]
+    if read_bytes[3] != b'0': 
+        protobuffer.pos = bytes(pmt[int.from_bytes(read_bytes[3],'big')], 'utf-8')
+    else:
+        protobuffer.pos = b'0'
     protobuffer.mapq = read_bytes[4]
     protobuffer.cigar = read_bytes[5]
     protobuffer.rnext = read_bytes[6]
     protobuffer.pnext = read_bytes[7]
     protobuffer.tlen = read_bytes[8]
-    protobuffer.seq = read_bytes[9]
+    while len(read_bytes[9]) % leangenes_params["AES_BLOCK_SIZE"] != 0:
+        read_bytes[9] += b'0'
+    protobuffer.seq = crypto.encrypt(read_bytes[9])
     protobuffer.qual = read_bytes[10]
     for i in range(11, len(read_bytes)): 
         protobuffer.additional_fields += read_bytes[i]
@@ -100,13 +108,16 @@ def sam_sender(sam_data):
     PARSING_STATE = SamState.PROCESSING_HEADER
     READ_STATE = SamReadFields.qname
 
+    crypto_key = b'0' * 32
+    crypto = AES.new(crypto_key, AES.MODE_ECB)
+
     for line in sam_lines:
         if PARSING_STATE == SamState.PROCESSING_HEADER:
             if line[0] == 64: #ASCII for @
                 new_result.sam_header += line
             else:
                 sep_read = line.split(b'\t')
-                result_tuple = process_read(new_result, sep_read)
+                result_tuple = process_read(new_result, sep_read, crypto)
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
@@ -118,7 +129,7 @@ def sam_sender(sam_data):
             sep_read = line.split(b'\t')
             if (len(sep_read[0]) > 0):
                 new_result.sam_header = b''
-                result_tuple = process_read(new_result, sep_read)
+                result_tuple = process_read(new_result, sep_read, crypto)
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
 
@@ -325,7 +336,8 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
 
 def main():
-    
+    global pmt
+
     ref_length = genome_params["REF_LENGTH"]
     read_length = genome_params["READ_LENGTH"]
     batch_size = genome_params["BATCH_SIZE"]	

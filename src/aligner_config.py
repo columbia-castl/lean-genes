@@ -31,7 +31,8 @@ enclave_settings = dict(
 
 leangenes_params = dict(
     unmatched_threshold = 1,
-    matched_threshold = 1
+    matched_threshold = 1,
+    AES_BLOCK_SIZE = 16
 )
 
 #CHR21 parameters 
