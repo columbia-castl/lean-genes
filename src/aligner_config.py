@@ -5,6 +5,8 @@ global_settings = dict(
     index_exists = True
 )
 
+#IP addresses refer to the machines that each component is connecting to, and not itself
+#Currently, the pubcloud's IP is potentially misleadingly named "server_ip"
 client_settings = dict(
     server_ip = '54.210.209.15',
     pmt_port = 4445,
@@ -37,10 +39,16 @@ leangenes_params = dict(
 
 #CHR21 parameters 
 #ref_length = 35106643 
-#read_length = 151 
+#read_length = 151
+#serialized = 351
+
+#Sample testing parameters
+#ref_length = 100
+#read_length = 15
+#serialized = 69
 genome_params = dict(
     REF_LENGTH = 100, #Length of FASTA sequence
     READ_LENGTH = 15,  #Length of individual FASTQ reads
-    SERIALIZED_READ_SIZE = 69,
+    SERIALIZED_READ_SIZE = 69, #Length of a protobuf message read
     BATCH_SIZE = 2 #Length of FASTQs created by enclave
 )

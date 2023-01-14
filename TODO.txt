@@ -1,0 +1,4 @@
+- automated installment of different requirements
+	- Need to list all the python libs installed with pip etc...
+- Preprocessing references as part of the workflow
+- client "stop" command sends signal to server?

@@ -2,7 +2,7 @@
 
 The code in this repository enables privacy-preserving DNA sequence alignment using BWA and a throughput-increasing shim using exact matching that together we call Lean Genes.
 
-As of right now, dependencies are tracked (loosely, TODO) in requirements-unofficial.txt
+As of right now, dependencies + versions are tracked (loosely, TODO) in requirements-unofficial.txt
 
 ## SETUP
 
