@@ -385,11 +385,12 @@ def main():
 
     #In background, allow BWA to index FASTA if index file doesn't exist
     bwa_path = enclave_settings["bwa_path"]
-    if not global_settings["index_exists"]:
+    if not enclave_settings["bwa_index_exists"]:
         trigger_bwa_indexing(bwa_path, fasta)
 
     #Hash ref genome
-    sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
+    if not enclave_settings["separate_hashing"]:
+        sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
     #Run server for receiving encrypted reads
     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

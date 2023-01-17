@@ -2,7 +2,6 @@
 global_settings = dict(
     redis_port = 6379,
     redis_ip = '54.210.209.15',
-    index_exists = True
 )
 
 #IP addresses refer to the machines that each component is connecting to, and not itself
@@ -28,7 +27,9 @@ enclave_settings = dict(
     server_ip = '54.210.209.15',
     vsock_port = 5006,
     bwa_path = "../bwa",
-    bwa_port = 5007
+    bwa_port = 5007,
+    bwa_index_exists = True,
+    separate_hashing = True
 )
 
 leangenes_params = dict(
