@@ -66,8 +66,9 @@ def dispatch_bwa(bwa_path, fasta, fastq):
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
 
-    print(str(stdout_data, 'utf-8'))
+    #print(str(stdout_data, 'utf-8'))
     #print(type(stdout_data))
+    print(" ~~~ BWA HAS PROCESSED UNMATCHED READS! ~~~ ")
     return stdout_data
 
 def process_read(protobuffer, read_bytes, crypto):
@@ -94,7 +95,8 @@ def process_read(protobuffer, read_bytes, crypto):
     for i in range(11, len(read_bytes)): 
         protobuffer.additional_fields += read_bytes[i]
 
-    print("Read size: " + str(protobuffer.ByteSize()))
+    if debug:
+        print("Read size: " + str(protobuffer.ByteSize()))
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
 def sam_sender(sam_data):
@@ -264,7 +266,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
     print(str(hashes_generated) + " hashes generated")
     print(str(lines_processed) + " lines processed") 
     print(str(chrom_counter) + " chromosome(s) processed")
-    print("*******************************************")
+    print("*******************************************\n")
 
     return True 
 

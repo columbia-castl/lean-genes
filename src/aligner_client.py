@@ -192,7 +192,10 @@ def unpack_read(next_result, crypto):
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
     #print(np.where(pmt == int(next_result.pos))[0][0])
-    sam += (str(np.where(pmt == int(next_result.pos))[0][0]).encode()  + b"\t")
+    if next_result.pos != b'0':
+        sam += (str(np.where(pmt == int(next_result.pos))[0][0]).encode()  + b"\t")
+    else:
+        sam += (b'0' + b'\t')
     sam += (next_result.mapq + b"\t")
     sam += (next_result.cigar + b"\t")
     sam += (next_result.rnext + b"\t")

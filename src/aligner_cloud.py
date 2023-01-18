@@ -88,7 +88,9 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     while True:
         client_socket.listen()
         conn, addr = client_socket.accept()
-        
+
+        print("CLIENT CONNECTION ESTABLISHED!")
+
         while True:
             data = conn.recv(serialized_read_size)
             read_counter += 1
@@ -106,16 +108,19 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if len(read_parser.hash) > 0:
                 read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
                 if read_found != None:
-                    print("Exact match read found.")
+                    if debug: 
+                        print("Exact match read found.")
+                    
                     #assemble SAM entry
                     exact_read_counter += 1
                     if debug: 
                         print("Match at: " + str(read_found, 'utf-8'))
                     serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
                     serialized_matches.append(serialized_match)
-                    print("\t-->Serialized match appended")
+                    #print("\t-->Serialized match appended")
                 else:
-                    print("Read was not exact match.")
+                    if debug: 
+                        print("Read was not exact match.")
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
@@ -171,18 +176,22 @@ def aggregate_alignment_results(num_unmatched, num_matched):
     global bwa_socket, serialized_matches
 
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result_socket.settimeout(10)
 
     if (num_unmatched == 0) and (num_matched == 0):
         return True
 
-    #if debug:
-    print("-->Aggregator thread initiated")
-    print("-->Aggregator called with (" + str(num_unmatched) + "," + str(num_matched) + ")")
+    if debug:
+        print("-->Aggregator thread initiated")
+        print("-->Aggregator called with (" + str(num_unmatched) + "," + str(num_matched) + ")")
 
     matched_aggregate = 0
     
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
-    print("-->Aggregator sending data!") 
+    
+    if debug:
+        print("-->Aggregator sending data!") 
+    
     #Initiate result transfer by enclave
     if num_unmatched > 0:
         bwa_socket.listen()
@@ -195,7 +204,7 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         data = conn.recv(1024)
         while data != b'':
             msg_len, size_len = _DecodeVarint32(data, 0)
-            print(str(msg_len) + " msg len")
+            #print(str(msg_len) + " msg len")
 
             if (msg_len + size_len > len(data)):
                 data += conn.recv(1024)
@@ -203,12 +212,12 @@ def aggregate_alignment_results(num_unmatched, num_matched):
 
             #Send a single read back to client
             result_socket.send(data[0:msg_len+size_len])
-            print("Unmatched read sent.")
+            #print("Unmatched read sent.")
 
             data = data[msg_len + size_len:]
 
-            print("Data POST SEND")
-            print(data)
+            #print("Data POST SEND")
+            #print(data)
 
         conn.close()
 
@@ -216,7 +225,7 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         match_buf = serialized_matches.pop()
         result_socket.send(match_buf[0]) 
         result_socket.send(match_buf[1])
-        print(match_buf[1])
+        #print(match_buf[1])
         matched_aggregate += 1
 
     result_socket.close()
@@ -253,6 +262,9 @@ def main():
     run_redis_server()
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
+   
+    print("\n")
+    print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
     receive_reads(serialized_read_size, crypto, redis_table)
 
 if __name__ == "__main__":
