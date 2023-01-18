@@ -114,7 +114,7 @@ def sam_sender(sam_data):
     for line in sam_lines:
         if PARSING_STATE == SamState.PROCESSING_HEADER:
             if line[0] == 64: #ASCII for @
-                new_result.sam_header += line
+                new_result.sam_header += (line + b'\n')
             else:
                 sep_read = line.split(b'\t')
                 result_tuple = process_read(new_result, sep_read, crypto)
@@ -122,8 +122,8 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
 
-                print("----> Sending result")
-                print(result_tuple)
+                #print("----> Sending result")
+                #print(result_tuple)
 
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
@@ -133,8 +133,8 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
 
-                print("----> Sending result")
-                print(result_tuple)
+                #print("----> Sending result")
+                #print(result_tuple)
         else:
             printf("ERROR: Unexpected SAM parsing state")
 

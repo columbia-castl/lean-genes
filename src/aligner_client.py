@@ -182,6 +182,8 @@ def send_read_wrapper(server_ip, read_port, filename):
 
 def unpack_read(next_result, crypto):
     sam = b''
+    if next_result.sam_header != b'':
+        sam += (next_result.sam_header)
     sam += (next_result.qname + b"\t")
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
@@ -289,7 +291,7 @@ def main():
             else:
                 print("CLIENT ERROR. PLEASE RESTART.")
 
-    print("Exiting client.")
+    #print("Exiting client.")
     #result_socket.close()
 
 if __name__ == "__main__":
