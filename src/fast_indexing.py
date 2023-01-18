@@ -6,7 +6,7 @@ import redis
 import threading
 
 from _thread import *
-from aligner_config import global_settings
+from aligner_config import global_settings, secret_settings
 
 ref_length = 35106643
 read_length = 151
@@ -18,7 +18,7 @@ num_threads = 10
 def main():
     global pmt_table
 
-    pmt_table = np.random.permutation(ref_length)
+    pmt_table = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(ref_length)
     fastq_lines = open(fastq).readlines()
 
     filtered_fastq = ""
@@ -52,7 +52,7 @@ def send_some_hashes(windows, init_pmt_index, thread_id):
     for window in windows:
         newhash = hmac.new(key, window, hashlib.sha256)
         curr_hash = newhash.digest()
-        redis_pipe.set(int.from_bytes(curr_hash, 'big'), bytes(pmt_table[init_pmt_index + window_count]))
+        redis_pipe.set(int.from_bytes(curr_hash, 'big'), int(pmt_table[init_pmt_index + window_count]))
         window_count += 1
         if window_count % 100000 == 0:
             print(window_count)

@@ -9,8 +9,9 @@ import redis
 import socket
 import time
 import os
+import numpy as np
 
-from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params
+from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params, secret_settings
 from subprocess import Popen, PIPE, STDOUT
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
@@ -211,7 +212,7 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
             curr_hash = newhash.digest()
 
             batch_counter += 1 
-            redis_pipe.set(int.from_bytes(curr_hash, 'big'), pmt[hashes_generated]) 
+            redis_pipe.set(int.from_bytes(curr_hash, 'big'), int(pmt[hashes_generated])) 
             if batch_counter % batch_size == 0:
                 while True:
                     try:
@@ -348,7 +349,9 @@ def main():
     bwa_port = enclave_settings["bwa_port"]
 
     print("Generate PMT permutation")
-    pmt = gen_permutation(ref_length, read_length)
+    #pmt = gen_permutation(ref_length, read_length)
+    pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(ref_length)
+    #print(pmt)
 
     #PMT generation
     if pmt_transfer:

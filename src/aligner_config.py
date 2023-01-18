@@ -29,7 +29,12 @@ enclave_settings = dict(
     bwa_path = "../bwa",
     bwa_port = 5007,
     bwa_index_exists = True,
-    separate_hashing = True
+    separate_hashing = False 
+)
+
+secret_settings = dict(
+    #Placeholder for key shared w/ client and enclave
+    perm_seed = 7
 )
 
 leangenes_params = dict(

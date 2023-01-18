@@ -6,8 +6,9 @@ import socket
 import os
 import array
 import threading
+import numpy as np
 
-from aligner_config import global_settings, client_settings, genome_params, leangenes_params
+from aligner_config import global_settings, client_settings, genome_params, leangenes_params, secret_settings
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
@@ -20,6 +21,7 @@ debug = False
 mode = "DEBUG"
 AES_BLOCK_SIZE = 16
 result_socket = ""
+pmt = []
 
 class FastqState(Enum):
     READ_LABEL = 1
@@ -181,13 +183,16 @@ def send_read_wrapper(server_ip, read_port, filename):
     send_reads(read_socket, crypto, hashkey, filename)
 
 def unpack_read(next_result, crypto):
+    global pmt
+
     sam = b''
     if next_result.sam_header != b'':
         sam += (next_result.sam_header)
     sam += (next_result.qname + b"\t")
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
-    sam += (next_result.pos + b"\t")
+    #print(np.where(pmt == int(next_result.pos))[0][0])
+    sam += (str(np.where(pmt == int(next_result.pos))[0][0]).encode()  + b"\t")
     sam += (next_result.mapq + b"\t")
     sam += (next_result.cigar + b"\t")
     sam += (next_result.rnext + b"\t")
@@ -257,7 +262,7 @@ def process_alignment_results(num_reads, crypto, savefile):
     file.write(sam)
 
 def main():
-    global result_socket
+    global result_socket, pmt
 
     server_ip = client_settings["server_ip"]
     pmt_port = client_settings["pmt_port"]
@@ -266,6 +271,11 @@ def main():
 
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', result_port))
+
+    pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
+    if debug:
+        print("PMT")
+        print(pmt)
 
     print("Client initialized")
     if len(sys.argv) > 1:
