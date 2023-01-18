@@ -148,7 +148,12 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
 
     print(str(read_count) + " reads processed.")
     print("\t-->Initiate result processing thread") 
-    start_new_thread(process_alignment_results, (read_count,crypto,))
+    #processing_thread = start_new_thread(process_alignment_results, (read_count,crypto,))
+    
+    #This is a change for NON-INTERACTIVE mode of the client
+    t1 = threading.Thread(target=process_alignment_results, args=(read_count, crypto, filename + ".sam",))
+    t1.start()
+    #t1.join()
 
     return ref_loc
 
@@ -187,11 +192,11 @@ def unpack_read(next_result, crypto):
     sam += (next_result.pnext + b"\t")
     sam += (next_result.tlen + b"\t")
     sam += (crypto.decrypt(next_result.seq)[:genome_params["READ_LENGTH"]] + b"\t")
-    sam += (bytes(next_result.qual, 'utf-8') + b"\t")
+    sam += (bytes(next_result.qual, 'utf-8') + b"\n")
 
     return sam
 
-def process_alignment_results(num_reads, crypto): 
+def process_alignment_results(num_reads, crypto, savefile): 
     global result_socket
 
     print("Result socket waiting...")
@@ -229,19 +234,25 @@ def process_alignment_results(num_reads, crypto):
             if debug: 
                 print("BYTES")
                 print(add_to_sam) 
-            print("STR")
-            print(str(add_to_sam, 'utf-8'))           
+                print("STR")
+                print(str(add_to_sam, 'utf-8'))           
 
             num_reads_processed += 1
-            print(str(num_reads_processed) + " reads processed")
+            if debug: 
+                print(str(num_reads_processed) + " reads processed")
 
             sam += add_to_sam
             data = data[size_len + msg_len:]
         #data = conn.recv(1024)
-
-    print("FULL SAM") 
-    print(sam)
+    
+    print(str(num_reads_processed) + " reads processed")
+    print("SAVING SAM FILE @ " + savefile) 
+    #print(sam)
     conn.close()
+    result_socket.close()
+
+    file = open(savefile, 'wb')
+    file.write(sam)
 
 def main():
     global result_socket
@@ -254,26 +265,32 @@ def main():
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', result_port))
 
-    command_str = ""
     print("Client initialized")
-    while True:
-        command_str = input("Input command: ")
-        if command_str not in client_commands:
-            print("Please enter a valid command. See available commands with 'help'")
-        elif command_str == "help":
-            print("Available commands are: ")
-            for command in client_commands:
-                print("\t" + command)
-        elif command_str == "get_pmt":
-            receive_pmt_wrapper(server_ip, pmt_port)
-        elif command_str == "send_reads":
-            readfile = input("\tEnter path to fastq: ")
-            send_read_wrapper(server_ip, read_port, readfile)
-        elif command_str == "stop":
-            break
-        else:
-            print("CLIENT ERROR. PLEASE RESTART.")
+    if len(sys.argv) > 1:
+        readfile = sys.argv[1]
+        send_read_wrapper(server_ip, read_port, readfile)
+    else:
+        command_str = ""
+        while True:
+            command_str = input("Input command: ")
+            if command_str not in client_commands:
+                print("Please enter a valid command. See available commands with 'help'")
+            elif command_str == "help":
+                print("Available commands are: ")
+                for command in client_commands:
+                    print("\t" + command)
+            elif command_str == "get_pmt":
+                receive_pmt_wrapper(server_ip, pmt_port)
+            elif command_str == "send_reads":
+                readfile = input("\tEnter path to fastq: ")
+                send_read_wrapper(server_ip, read_port, readfile)
+            elif command_str == "stop":
+                break
+            else:
+                print("CLIENT ERROR. PLEASE RESTART.")
 
+    print("Exiting client.")
+    #result_socket.close()
 
 if __name__ == "__main__":
     main()
