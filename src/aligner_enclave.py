@@ -22,7 +22,7 @@ from google.protobuf.internal.encoder import _VarintBytes
 from enum import Enum
 
 #Global params to help with debug and test
-debug = False
+debug = False 
 check_locations = False
 verify_redis = False
 pmt_transfer = False
@@ -75,7 +75,9 @@ def process_read(protobuffer, read_bytes, crypto):
     global pmt
 
     if debug:
+        print("READ_BYTES")
         print(read_bytes)
+
     protobuffer.qname = read_bytes[0]
     protobuffer.flag = read_bytes[1]
     protobuffer.rname = read_bytes[2]
@@ -332,6 +334,9 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             if unmatched_counter % batch_size == 0:
                 #WHERE BWA IS CALLED 
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
+                if debug: 
+                    print(returned_sam)
+                    print("BWA RETURNS ^^")
                 sam_sender(returned_sam) 
                 unmatched_fastq = ""
 

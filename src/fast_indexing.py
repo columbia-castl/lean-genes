@@ -1,3 +1,4 @@
+import tensorflow as tf
 import numpy as np
 import tensorflow_text as tf_text
 import hashlib
@@ -8,12 +9,17 @@ import threading
 from _thread import *
 from aligner_config import global_settings, secret_settings
 
-ref_length = 35106643
-read_length = 151
-fastq = "../test_data/chr21_preprocess.fa"
+#ref_length = 35106643
+#read_length = 151
+#fastq = "../test_data/chr21_preprocess.fa"
+
+ref_length = 100
+read_length = 15
+fastq = "../test_data/small_reftest_15.fa"
+
 pmt_table = ""
 
-num_threads = 10
+num_threads = 3
 
 def main():
     global pmt_table
@@ -33,12 +39,14 @@ def main():
     init_index = 0
     thread_id = 0
     for i in range(num_threads-1):
-        start_new_thread(send_some_hashes, (windows[init_index:init_index + int(len(windows)/num_threads)], init_index, thread_id,))
+        new_thread = threading.Thread(target=send_some_hashes, args=(windows[init_index:init_index + int(len(windows)/num_threads)], init_index, thread_id,))
         init_index += int(len(windows)/num_threads)
         thread_id += 1
+        new_thread.start()
 
-    start_new_thread(send_some_hashes, (windows[init_index:], init_index, thread_id,))
-    
+    last_thread = threading.Thread(target=send_some_hashes, args=(windows[init_index:], init_index, thread_id,))
+    last_thread.start()
+
 def send_some_hashes(windows, init_pmt_index, thread_id):
 
     print("function called with init index = " + str(init_pmt_index) + " from THREAD ID " + str(thread_id))
@@ -50,17 +58,23 @@ def send_some_hashes(windows, init_pmt_index, thread_id):
     key = b'0' * 32
 
     for window in windows:
-        newhash = hmac.new(key, window, hashlib.sha256)
+        #print(tf.strings.join(window).numpy())
+        newhash = hmac.new(key, tf.strings.join(window).numpy() , hashlib.sha256)
         curr_hash = newhash.digest()
+        #print("WINDOW")
+        #print(window.numpy())
+        #print("HASH")
+        #print(curr_hash)
+        
         redis_pipe.set(int.from_bytes(curr_hash, 'big'), int(pmt_table[init_pmt_index + window_count]))
         window_count += 1
         if window_count % 100000 == 0:
             print(window_count)
             redis_pipe.execute()
 
-    if window_count % 100000 != 0:
-        redis_pipe.execute()
-
+    resp = redis_pipe.execute()
+    #print(resp)
+    print("fast indexing complete")
    
 
 if __name__ == "__main__":
