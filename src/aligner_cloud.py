@@ -17,8 +17,8 @@ debug = False
 mode = "DEBUG"
 do_pmt_proxy = False
 
-bwa_socket = ""
-
+matched_lock = threading.Lock()
+unmatched_lock = threading.Lock()
 serialized_matches = []
 serialized_unmatches = []
 
@@ -69,7 +69,10 @@ def pmt_proxy(proxy_port, pmt_client_port):
     return proxy_socket
 
 def receive_reads(serialized_read_size, crypto, redis_table):
-    global serialized_matches, serialized_unmatches
+    
+    print("CLIENT THREAD STARTED")
+
+    global serialized_matches
 
     read_parser = Read()
 
@@ -81,7 +84,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
     exact_read_counter = 0
     serialized_matches = []
-    serialized_unmatches = []
+    #serialized_unmatches = []
     unmatched_read_counter = 0
     unmatched_reads = []
 
@@ -93,11 +96,19 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
         while True:
             data = conn.recv(serialized_read_size)
+            
+            if data == b'':
+                break
+
             read_counter += 1
             
             if debug:
                 print("-->received data " + str(read_counter))
-            
+           
+            while len(data) < serialized_read_size:
+                data += conn.recv(serialized_read_size - len(data))
+                print("Data now len " + str(len(data)))
+
             check_read = read_parser.ParseFromString(data)
 
 	        #Cloud can only see reads in debug mode
@@ -125,13 +136,14 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     unmatched_reads.append(data)                
 
             if len(unmatched_reads) > leangenes_params["unmatched_threshold"]: 
-                if unmatched_read_counter == leangenes_params["unmatched_threshold"] + 1: 
+                if unmatched_read_counter % (leangenes_params["unmatched_threshold"] + 1) == 0: 
                     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                 if debug:
                     print("Len of unmatched reads: " + str(len(unmatched_reads)))
                 for read in unmatched_reads:
                     unmatched_socket.send(read)
+                #TODO: CHECK THIS!
                 unmatched_reads.clear()
                 unmatched_socket.close()
 
@@ -144,10 +156,16 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if not data:
                 break
 
-        #unmatched_socket.close()
-        
-        start_new_thread(aggregate_alignment_results, (unmatched_read_counter, exact_read_counter,))
-        #start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
+        #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
+        if len(unmatched_reads) > 0:
+            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"]))
+            while len(unmatched_reads) > 0:
+                unmatched_socket.send(unmatched_reads.pop())
+            unmatched_socket.close()
+
+        #FLUSH EXTRA EXACT MATCHES
+        start_new_thread(aggregate_alignment_results, (0, len(serialized_matches),))
 
         unmatched_read_counter = 0
         exact_read_counter = 0
@@ -171,9 +189,42 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"*"):
 
     return (_VarintBytes(new_result.ByteSize()), new_result.SerializeToString())
         
+def get_bwa_results():
+    global serialized_unmatches
+
+    print("ENCLAVE SIDE THREAD STARTS")
+
+    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    bwa_socket.bind(('', pubcloud_settings["bwa_port"]))
+
+    while True:
+        bwa_socket.listen()
+        conn, addr = bwa_socket.accept()
+
+        if debug:
+            print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
+
+        data = conn.recv(1024) 
+        while data:
+             
+            if data == b'':
+                break
+
+            msg_len, size_len = _DecodeVarint32(data, 0)
+
+            if (msg_len + size_len > len(data)):
+                data += conn.recv(1024)
+                continue
+
+            serialized_unmatches.append((data[0:size_len], data[size_len: msg_len + size_len]))
+            data = data[msg_len + size_len:]
+
+        conn.close()
+        start_new_thread(aggregate_alignment_results, (len(serialized_unmatches), len(serialized_matches),))
 
 def aggregate_alignment_results(num_unmatched, num_matched):
-    global bwa_socket, serialized_matches
+    global serialized_matches, serialized_unmatches
+    global matched_lock, unmatched_lock
 
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.settimeout(10)
@@ -186,47 +237,65 @@ def aggregate_alignment_results(num_unmatched, num_matched):
         print("-->Aggregator called with (" + str(num_unmatched) + "," + str(num_matched) + ")")
 
     matched_aggregate = 0
-    
+    unmatched_aggregate = 0
+
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
     
     if debug:
         print("-->Aggregator sending data!") 
-    
-    #Initiate result transfer by enclave
-    if num_unmatched > 0:
-        bwa_socket.listen()
-        conn, addr = bwa_socket.accept()
+  
+    #We want atomic pops from the lists!
+    got_unmatch_lock = False
+    while not got_unmatch_lock:
+        got_unmatch_lock = unmatched_lock.acquire()
+        if got_unmatch_lock:
+            if debug:
+                print("Got unmatch lock.")
+            real_unmatched = num_unmatched
+            if len(serialized_unmatches) < num_unmatched:
+                real_unmatched = len(serialized_unmatches)
 
-        print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
+            while (unmatched_aggregate < real_unmatched):
+                
+                #Send single BWA result back to client
+                unmatch_buf = serialized_unmatches.pop()
+                result_socket.send(unmatch_buf[0])
+                result_socket.send(unmatch_buf[1])
+               
+                unmatched_aggregate += 1
+                
+                if debug:
+                    print("---> Unmatched result back to client.")
 
-        read_pair = []
-        read_size = 0
-        data = conn.recv(1024)
-        while data != b'':
-            msg_len, size_len = _DecodeVarint32(data, 0)
-            #print(str(msg_len) + " msg len")
+            unmatched_lock.release()
+            if debug:
+                print("Release unmatch lock.")
 
-            if (msg_len + size_len > len(data)):
-                data += conn.recv(1024)
-                continue
+    #Atomic pops, pt 2
+    got_match_lock = False
+    while not got_match_lock:
+        got_match_lock = matched_lock.acquire()
+        if got_match_lock:
+            if debug: 
+                print("Got match lock.")
+            real_matched = num_matched
+            if len(serialized_matches) < num_matched:
+                real_matched = len(serialized_matches)
 
-            #Send a single read back to client
-            result_socket.send(data[0:msg_len+size_len])
-            #print("Unmatched read sent.")
-
-            data = data[msg_len + size_len:]
-
-            #print("Data POST SEND")
-            #print(data)
-
-        conn.close()
-
-    while (matched_aggregate < num_matched):
-        match_buf = serialized_matches.pop()
-        result_socket.send(match_buf[0]) 
-        result_socket.send(match_buf[1])
-        #print(match_buf[1])
-        matched_aggregate += 1
+            while (matched_aggregate < real_matched):
+                
+                #Send single exact match back to client
+                match_buf = serialized_matches.pop()
+                result_socket.send(match_buf[0]) 
+                result_socket.send(match_buf[1])
+                
+                matched_aggregate += 1
+                
+                if debug:
+                    print("---> Matched result back to client.")
+            matched_lock.release()
+            if debug:
+                print("Release match lock.")
 
     result_socket.close()
 
@@ -244,8 +313,6 @@ def main():
     redis_port = global_settings["redis_port"]
     bwa_port = pubcloud_settings["bwa_port"]
 
-    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    bwa_socket.bind(('', bwa_port))
 
     if mode == "DEBUG":
         cipherkey = b'0' * 32
@@ -265,7 +332,11 @@ def main():
    
     print("\n")
     print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
-    receive_reads(serialized_read_size, crypto, redis_table)
+    from_client_thread = start_new_thread(receive_reads, (serialized_read_size, crypto, redis_table,))
+    from_enclave_thread = start_new_thread(get_bwa_results, ())
+
+    while True:
+        x = 1
 
 if __name__ == "__main__":
     main()

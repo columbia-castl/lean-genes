@@ -107,7 +107,7 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
                     get_line_bytes += b'0'
                 newread.read = encrypter.encrypt(get_line_bytes)
                 newread.hash = curr_hash
-
+                
                 PARSING_STATE = FastqState.DIV
 
             else:
@@ -186,8 +186,10 @@ def unpack_read(next_result, crypto):
     global pmt
 
     sam = b''
+    header = b''
+
     if next_result.sam_header != b'':
-        sam += (next_result.sam_header)
+        header = (next_result.sam_header)
     sam += (next_result.qname + b"\t")
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
@@ -204,22 +206,23 @@ def unpack_read(next_result, crypto):
     sam += (crypto.decrypt(next_result.seq)[:genome_params["READ_LENGTH"]] + b"\t")
     sam += (bytes(next_result.qual, 'utf-8') + b"\n")
 
-    return sam
+    return (sam, header)
 
 def process_alignment_results(num_reads, crypto, savefile): 
     global result_socket
 
     print("Result socket waiting...")
 
-    #Wait for results
-    result_socket.listen(5)
-    conn, addr = result_socket.accept()
-    print("Processing thread receives connection!")
-
     num_reads_processed = 0
     sam = b""
+    no_header = True
 
     while num_reads_processed < num_reads:
+        #Wait for results
+        result_socket.listen(5)
+        conn, addr = result_socket.accept()
+        print("Processing thread receives connection!")
+
         data = conn.recv(1024) 
         while data:
             msg_len, size_len = _DecodeVarint32(data, 0)
@@ -240,7 +243,7 @@ def process_alignment_results(num_reads, crypto, savefile):
             next_result = Result()
             check_result = next_result.ParseFromString(result)
         
-            add_to_sam = unpack_read(next_result, crypto)
+            add_to_sam, header = unpack_read(next_result, crypto)
             if debug: 
                 print("BYTES")
                 print(add_to_sam) 
@@ -252,9 +255,15 @@ def process_alignment_results(num_reads, crypto, savefile):
                 print(str(num_reads_processed) + " reads processed")
 
             sam += add_to_sam
+            if (header != b'') and no_header:
+                sam = header + sam
+                no_header = False
+
             data = data[size_len + msg_len:]
-        #data = conn.recv(1024)
-    
+            data += conn.recv(1024)
+   
+        conn.close()
+
     print(str(num_reads_processed) + " reads processed")
     print("SAVING SAM FILE @ " + savefile) 
     #print(sam)

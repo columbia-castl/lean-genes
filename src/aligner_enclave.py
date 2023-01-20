@@ -23,6 +23,7 @@ from enum import Enum
 
 #Global params to help with debug and test
 debug = False 
+debug_subprocess = False
 check_locations = False
 verify_redis = False
 pmt_transfer = False
@@ -60,7 +61,7 @@ def trigger_bwa_indexing(bwa_path, fasta):
 
 def dispatch_bwa(bwa_path, fasta, fastq):
     print("Passing batched FASTQ to BWA...")
-    if debug: 
+    if debug_subprocess: 
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
@@ -314,14 +315,13 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         crypto = AES.new(crypto_key, AES.MODE_ECB)
         unmatched_counter = 0
 
-        data = 1 
+        data = conn.recv(serialized_read_size) 
         while data != b'':
             if debug:
                 print("-->received unmatched read from cloud")
 
             unmatched_counter += 1
 
-            data = conn.recv(serialized_read_size)
             check_read = read_parser.ParseFromString(data)
 
             unmatched_fastq += (anonymized_label + "\n")
@@ -339,6 +339,14 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
                     print("BWA RETURNS ^^")
                 sam_sender(returned_sam) 
                 unmatched_fastq = ""
+
+            data = conn.recv(serialized_read_size)
+
+        #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
+        if unmatched_counter % batch_size:
+            returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
+            sam_sender(returned_sam)
+            unmatched_fastq = ""
 
         conn.close()                
 
@@ -376,7 +384,6 @@ def main():
     else:
         fasta = sys.argv[1]
    
-    processed_ref = get_ref(fasta)
 
     #Cloud-side operations    
     while True:    
@@ -400,6 +407,7 @@ def main():
 
     #Hash ref genome
     if not enclave_settings["separate_hashing"]:
+        processed_ref = get_ref(fasta)
         sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
     #Run server for receiving encrypted reads

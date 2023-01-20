@@ -1,0 +1,7 @@
+@SQ	SN:chr1	LN:100
+@HD	VN:1.5	SO:unsorted	GO:query
+@PG	ID:bwa	PN:bwa	VN:0.7.17-r1198-dirty	CL:../bwa/bwa mem ../test_data/small_reftest_15.fa -
+unlabeled	0	*	78	60	*	*	0	0	TTAAGGCGTGGATCA	IIIIIIIIIIIIIII
+unlabeled	0	*	57	60	*	*	0	0	TTTTGCAGAATCGGC	IIIIIIIIIIIIIII
+unlabeled	4	*	0	0	*	*	0	0	TAAAAAAAAAAAAAA	IIIIIIIIIIIIIII
+unlabeled	4	*	0	0	*	*	0	0	TTAAAAAAAAAAAAA	IIIIIIIIIIIIIII
