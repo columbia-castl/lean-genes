@@ -315,12 +315,22 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         crypto = AES.new(crypto_key, AES.MODE_ECB)
         unmatched_counter = 0
 
-        data = conn.recv(serialized_read_size) 
-        while data != b'':
+        print("CONNECTION TO PUBCLOUD ESTABLISHED")
+
+        while True:
+            data = conn.recv(serialized_read_size) 
+            
             if debug:
                 print("-->received unmatched read from cloud")
 
+            if not data:
+                break
+
             unmatched_counter += 1
+
+            while len(data) < serialized_read_size:
+                data += conn.recv(serialized_read_size - len(data))
+                print("Data now len " + str(len(data)))
 
             check_read = read_parser.ParseFromString(data)
 
@@ -339,8 +349,6 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
                     print("BWA RETURNS ^^")
                 sam_sender(returned_sam) 
                 unmatched_fastq = ""
-
-            data = conn.recv(serialized_read_size)
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
         if unmatched_counter % batch_size:
