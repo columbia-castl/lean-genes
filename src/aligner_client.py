@@ -17,7 +17,7 @@ from reads_pb2 import Read, PMT_Entry, Result
 from google.protobuf.internal.decoder import _DecodeVarint32
 from _thread import *
 
-debug = False
+debug = client_settings["debug"]
 mode = "DEBUG"
 AES_BLOCK_SIZE = 16
 result_socket = ""

@@ -22,7 +22,7 @@ from google.protobuf.internal.encoder import _VarintBytes
 from enum import Enum
 
 #Global params to help with debug and test
-debug = False 
+debug = enclave_settings["debug"] 
 debug_subprocess = False
 check_locations = False
 verify_redis = False
@@ -67,8 +67,9 @@ def dispatch_bwa(bwa_path, fasta, fastq):
         call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
 
-    #print(str(stdout_data, 'utf-8'))
-    #print(type(stdout_data))
+    if debug:
+        print(str(stdout_data, 'utf-8'))
+        print(type(stdout_data))
     print(" ~~~ BWA HAS PROCESSED UNMATCHED READS! ~~~ ")
     return stdout_data
 
@@ -103,6 +104,9 @@ def process_read(protobuffer, read_bytes, crypto):
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
 def sam_sender(sam_data):
+
+    if sam_data == b'':
+        return ''
 
     new_result = Result()
     sam_lines = sam_data.split(b'\n')
@@ -352,9 +356,10 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
         if unmatched_counter % batch_size:
-            returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
-            sam_sender(returned_sam)
-            unmatched_fastq = ""
+            if unmatched_fastq != "":
+                returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
+                sam_sender(returned_sam)
+                unmatched_fastq = ""
 
         conn.close()                
 

@@ -13,7 +13,7 @@ from google.protobuf.internal.encoder import _VarintBytes
 from google.protobuf.internal.decoder import _DecodeVarint32
 from vsock_handlers import VsockStream
 
-debug = False
+debug = pubcloud_settings["debug"]
 mode = "DEBUG"
 do_pmt_proxy = False
 
