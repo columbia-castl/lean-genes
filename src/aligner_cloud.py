@@ -104,10 +104,15 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             
             if debug:
                 print("-->received data " + str(read_counter))
-           
+
+            data_attempts = 0
             while len(data) < serialized_read_size:
                 data += conn.recv(serialized_read_size - len(data))
-                print("Data now len " + str(len(data)))
+                if debug:
+                    print("Data now len " + str(len(data)))
+                data_attempts += 1
+                if data_attempts > 10:
+                    print("WARNING: Stuck in data receiving loop!")
 
             check_read = read_parser.ParseFromString(data)
 
@@ -329,11 +334,14 @@ def main():
     run_redis_server()
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
-   
-    print("\n")
-    print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
-    from_client_thread = start_new_thread(receive_reads, (serialized_read_size, crypto, redis_table,))
-    from_enclave_thread = start_new_thread(get_bwa_results, ())
+  
+    if not pubcloud_settings["only_indexing"]:
+        print("\n")
+        print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
+        from_client_thread = start_new_thread(receive_reads, (serialized_read_size, crypto, redis_table,))
+        from_enclave_thread = start_new_thread(get_bwa_results, ())
+    else:
+        print("You have activated LeanGenes in ONLY INDEXING mode!")
 
     while True:
         x = 1

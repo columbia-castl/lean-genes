@@ -44,6 +44,8 @@ To run `aligner_enclave.py`, simply enter this command into the terminal
 This component can be used to simulate or actually be run within an untrusted public cloud. Its responsibilities include setting up a redis server that will serve as a database for keyed hashes of reads for a genome.
 It receives encrypted reads in a protobuf format, searches for exact matches via the redis DB, and dispatches unmatched reads into the trusted enclave to be run by BWA.
 
+If you would like to run this script PURELY TO COLLECT AN INDEX, there is a config option called `only_indexing` in the `dict` `pubcloud_settings` in `aligner_config.py`
+
 ###### Running it
 To run it, simply enter this command into the terminal
  `` python3 aligner_cloud.py``

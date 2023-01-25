@@ -22,6 +22,7 @@ pubcloud_settings = dict(
     result_port = 4446,
     unmatched_port = 5006,
     bwa_port = 5007,
+    only_indexing = True,
     debug = False
 )
 
@@ -33,6 +34,7 @@ enclave_settings = dict(
     bwa_port = 5007,
     bwa_index_exists = True,
     separate_hashing = True,
+    hashing_progress_indicator = 1000000,
     debug = False
 )
 

@@ -34,7 +34,7 @@ line_limit = 100
 mode = "DEBUG"
 
 #After x hashes print progress
-progress_indicator = 5000000
+progress_indicator = enclave_settings["hashing_progress_indicator"]
 pmt = []
 
 class SamState(Enum):
@@ -231,7 +231,8 @@ def sliding_window_table(key, ref_lines, redis_table, pmt, read_size=151):
                         print("Redis connection error... Trying again.")
                         sleep(10)
 
-                print(redis_response)
+                if debug:
+                    print(redis_response)
                 batch_counter = 0
 
             if verify_redis:
