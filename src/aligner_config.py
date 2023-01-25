@@ -7,7 +7,7 @@ global_settings = dict(
 #IP addresses refer to the machines that each component is connecting to, and not itself
 #Currently, the pubcloud's IP is potentially misleadingly named "server_ip"
 client_settings = dict(
-    server_ip = '54.210.209.15',
+    server_ip = '18.208.155.212',
     pmt_port = 4445,
     read_port = 4444,
     result_port = 4446,
@@ -28,7 +28,8 @@ pubcloud_settings = dict(
 enclave_settings = dict(
     server_ip = '18.208.155.212',
     vsock_port = 5006,
-    bwa_path = "../bwa",
+    #If this path isn't empty (i.e. BWA is on PATH), make sure it ends with /"
+    bwa_path = "../bwa/",
     bwa_port = 5007,
     bwa_index_exists = True,
     separate_hashing = True,

@@ -57,14 +57,14 @@ class SamReadFields(Enum):
 
 def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
-    os.system(bwa_path + "/bwa index " + fasta + " &")
+    os.system(bwa_path + "bwa index " + fasta + " &")
 
 def dispatch_bwa(bwa_path, fasta, fastq):
     print("Passing batched FASTQ to BWA...")
     if debug_subprocess: 
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
-        call_bwa = Popen([bwa_path + "/bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
 
     if debug:
