@@ -5,7 +5,7 @@ global_settings = dict(
 )
 
 #IP addresses refer to the machines that each component is connecting to, and not itself
-#Currently, the pubcloud's IP is potentially misleadingly named "server_ip"
+#Currently, the pubcloud's IP is misleadingly named "server_ip"
 client_settings = dict(
     server_ip = '18.208.155.212',
     pmt_port = 4445,
@@ -22,7 +22,7 @@ pubcloud_settings = dict(
     result_port = 4446,
     unmatched_port = 5006,
     bwa_port = 5007,
-    only_indexing = True,
+    only_indexing = False,
     debug = False
 )
 
@@ -33,7 +33,7 @@ enclave_settings = dict(
     bwa_path = "../bwa/",
     bwa_port = 5007,
     bwa_index_exists = True,
-    separate_hashing = False,
+    separate_hashing = True,
     only_indexing = False,
     hashing_progress_indicator = 1000000,
     debug = False
@@ -45,8 +45,10 @@ secret_settings = dict(
 )
 
 leangenes_params = dict(
-    unmatched_threshold = 1,
-    matched_threshold = 1,
+    #No. of unmatched reads triggering send back to client       
+    #TODO: Will probably be obsoleted and set = BATCH_SIZE, but keeping while testing 
+    UNMATCHED_THRESHOLD = 5, 
+    BATCH_SIZE = 20, #Length of FASTQs created by enclave
     AES_BLOCK_SIZE = 16
 )
 
@@ -63,5 +65,4 @@ genome_params = dict(
     REF_LENGTH = 35106643, #Length of FASTA sequence
     READ_LENGTH = 151,  #Length of individual FASTQ reads
     SERIALIZED_READ_SIZE = 351, #Length of a protobuf message read
-    BATCH_SIZE = 10 #Length of FASTQs created by enclave
 )

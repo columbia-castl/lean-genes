@@ -140,17 +140,18 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
-            if len(unmatched_reads) > leangenes_params["unmatched_threshold"]: 
-                if unmatched_read_counter % (leangenes_params["unmatched_threshold"] + 1) == 0: 
+            if len(unmatched_reads) > leangenes_params["BATCH_SIZE"]: 
+                if unmatched_read_counter and (unmatched_read_counter % (leangenes_params["BATCH_SIZE"]) == 0): 
                     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-                if debug:
-                    print("Len of unmatched reads: " + str(len(unmatched_reads)))
-                for read in unmatched_reads:
-                    unmatched_socket.send(read)
-                #TODO: CHECK THIS!
-                unmatched_reads.clear()
-                unmatched_socket.close()
+                    
+                    if debug:
+                        print("Len of unmatched reads: " + str(len(unmatched_reads)))
+                    for read in unmatched_reads:
+                        unmatched_socket.send(read)
+                    #TODO: CHECK THIS!
+                    unmatched_reads.clear()
+                    unmatched_socket.close()
 
             if debug:
                 print("Data: ")
@@ -178,7 +179,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
-def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"*"):
+def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result = Result()
     new_result.qname = qname
     new_result.flag = b'0'
@@ -215,8 +216,18 @@ def get_bwa_results():
             if data == b'':
                 break
 
-            msg_len, size_len = _DecodeVarint32(data, 0)
-
+            #This segment of code to handle freak case that it doesn't read the whole msg size varint
+            #May need to put in other areas where this is done in this code
+            size_retrieved = False
+            msg_len = 0
+            size_len = 0
+            while not size_retrieved: 
+                try:
+                    msg_len, size_len = _DecodeVarint32(data, 0)
+                    size_retrieved = True
+                except IndexError:
+                    data += conn.recv(10)
+                    
             if (msg_len + size_len > len(data)):
                 data += conn.recv(1024)
                 continue

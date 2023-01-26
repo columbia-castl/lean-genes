@@ -135,7 +135,7 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
 
-                #print("----> Sending result")
+                print("----> Sending result back to cloud")
                 #print(result_tuple)
 
         elif PARSING_STATE == SamState.PROCESSING_READS:
@@ -334,14 +334,13 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             if not data:
                 break
 
-            unmatched_counter += 1
-
             while len(data) < serialized_read_size:
                 data += conn.recv(serialized_read_size - len(data))
                 print("Data now len " + str(len(data)))
 
             check_read = read_parser.ParseFromString(data)
 
+            unmatched_counter += 1
             unmatched_fastq += (anonymized_label + "\n")
 
             read_size = genome_params["READ_LENGTH"]
@@ -360,6 +359,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
         if unmatched_counter % batch_size:
+            print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
             if unmatched_fastq != "":
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
                 sam_sender(returned_sam)
@@ -373,7 +373,7 @@ def main():
 
     ref_length = genome_params["REF_LENGTH"]
     read_length = genome_params["READ_LENGTH"]
-    batch_size = genome_params["BATCH_SIZE"]	
+    batch_size = leangenes_params["BATCH_SIZE"]	
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network parameters
