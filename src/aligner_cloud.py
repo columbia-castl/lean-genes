@@ -178,7 +178,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
-def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"*"):
+def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG")
     new_result = Result()
     new_result.qname = qname
     new_result.flag = b'0'
