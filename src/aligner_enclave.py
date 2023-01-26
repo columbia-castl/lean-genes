@@ -424,10 +424,11 @@ def main():
         processed_ref = get_ref(fasta)
         sliding_window_table(key, processed_ref, redis_table, pmt, read_length)
 
-    #Run server for receiving encrypted reads
-    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    unmatched_socket.bind(('', unmatched_port)) 
-    get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta)
+    if not enclave_settings["only_indexing"]:
+        #Run server for receiving encrypted reads
+        unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        unmatched_socket.bind(('', unmatched_port)) 
+        get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta)
 
 if __name__ == "__main__":
     main()

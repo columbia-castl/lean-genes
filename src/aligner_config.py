@@ -33,7 +33,8 @@ enclave_settings = dict(
     bwa_path = "../bwa/",
     bwa_port = 5007,
     bwa_index_exists = True,
-    separate_hashing = True,
+    separate_hashing = False,
+    only_indexing = False,
     hashing_progress_indicator = 1000000,
     debug = False
 )
@@ -59,8 +60,8 @@ leangenes_params = dict(
 #read_length = 15
 #serialized = 69
 genome_params = dict(
-    REF_LENGTH = 100, #Length of FASTA sequence
-    READ_LENGTH = 15,  #Length of individual FASTQ reads
-    SERIALIZED_READ_SIZE = 69, #Length of a protobuf message read
-    BATCH_SIZE = 2 #Length of FASTQs created by enclave
+    REF_LENGTH = 35106643, #Length of FASTA sequence
+    READ_LENGTH = 151,  #Length of individual FASTQ reads
+    SERIALIZED_READ_SIZE = 351, #Length of a protobuf message read
+    BATCH_SIZE = 10 #Length of FASTQs created by enclave
 )
