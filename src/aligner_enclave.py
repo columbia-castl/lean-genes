@@ -135,8 +135,9 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[1])
                 PARSING_STATE = SamState.PROCESSING_READS
 
-                print("----> Sending result back to cloud")
-                #print(result_tuple)
+                if debug:
+                    print("----> Sending result back to cloud")
+                    print(result_tuple)
 
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
@@ -358,8 +359,9 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
                 unmatched_fastq = ""
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
-        if unmatched_counter % batch_size:
-            print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
+        if unmatched_counter % batch_size: 
+            if debug:
+                print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
             if unmatched_fastq != "":
                 returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
                 sam_sender(returned_sam)
