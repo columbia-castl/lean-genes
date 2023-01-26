@@ -83,8 +83,11 @@ def process_read(protobuffer, read_bytes, crypto):
     protobuffer.qname = read_bytes[0]
     protobuffer.flag = read_bytes[1]
     protobuffer.rname = read_bytes[2]
-    if read_bytes[3] != b'0': 
-        protobuffer.pos = bytes(pmt[int.from_bytes(read_bytes[3],'big')], 'utf-8')
+    if read_bytes[3] != b'0':
+        if debug:
+            print("BWA maps read to pos... ")
+            print(read_bytes[3].decode())
+        protobuffer.pos = bytes(str(pmt[int(read_bytes[3].decode())]), 'utf-8')
     else:
         protobuffer.pos = b'0'
     protobuffer.mapq = read_bytes[4]
