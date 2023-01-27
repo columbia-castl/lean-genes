@@ -4,6 +4,7 @@ import sys
 import re
 import socket
 import os
+import time
 import array
 import threading
 import numpy as np
@@ -37,6 +38,9 @@ read_socket = ""
 
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
+write_sam_lock = threading.Lock()
+first_thread_written = False
+
 def receive_pmt(pmt_socket):
     pmt = []
     recv_block_size = 1024
@@ -63,7 +67,7 @@ def receive_pmt(pmt_socket):
         if not data:
             break
 
-def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
+def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/samples.fq"):
     global PARSING_STATE
 
     print("\nProcessing reads from fastq: " + filename)
@@ -71,8 +75,13 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
     read_count = 0
     find_count = 0
 
-    ref_loc = []
+    serialized_batch = b""
+    batch_counter = 0
+    threads_dispatched = 0
 
+    crypto_key = b'0' * 32
+    crypto = AES.new(crypto_key, AES.MODE_ECB)
+ 
     while True:
         get_line = read_file.readline()
         
@@ -137,27 +146,35 @@ def send_reads(socket, encrypter, hashkey, filename="../test_data/samples.fq"):
                 #print(qual_string)
 
                 serialized_read = newread.SerializeToString()
-                #print("Serialized read size: " + str(len(serialized_read)))
-                socket.send(serialized_read)
+                serialized_batch += serialized_read
+                batch_counter += 1
+
+                if debug:
+                    print("Serialized read size: " + str(len(serialized_read)))
+                    print(serialized_read) 
+
+                if batch_counter == batch_size:
+                    print("-->Batch size reached. Sending to cloud.")
+                    socket.send(serialized_batch)
+                    batch_counter = 0
+                    serialized_batch = b""
+                    t1 = threading.Thread(target=process_alignment_results, args=(batch_size, crypto, filename + ".sam",threads_dispatched,))
+                    t1.start() 
+                    threads_dispatched += 1
                 PARSING_STATE = FastqState.READ_LABEL
 
         else:
             printf("Error: bad fastq parsing state!")
             exit()
 
-    crypto_key = b'0' * 32
-    crypto = AES.new(crypto_key, AES.MODE_ECB)
+    if batch_counter:
+        print("-->Send final batch to cloud.")
+        socket.send(serialized_batch)
+        serialized_batch = b""
+        t1 = threading.Thread(target=process_alignment_results, args=(batch_counter, crypto, filename + ".sam",threads_dispatched,))
+        t1.start()
 
-    print(str(read_count) + " reads processed.")
-    print("\t-->Initiate result processing thread") 
-    #processing_thread = start_new_thread(process_alignment_results, (read_count,crypto,))
-    
-    #This is a change for NON-INTERACTIVE mode of the client
-    t1 = threading.Thread(target=process_alignment_results, args=(read_count, crypto, filename + ".sam",))
-    t1.start()
-    #t1.join()
-
-    return ref_loc
+    print(str(read_count) + " reads processed in total.")
 
 
 def receive_pmt_wrapper(server_ip, pmt_port):
@@ -180,7 +197,8 @@ def send_read_wrapper(server_ip, read_port, filename):
     read_socket.connect((server_ip, read_port))
 
     print("Parsing fastq...")
-    send_reads(read_socket, crypto, hashkey, filename)
+    send_reads(read_socket, crypto, hashkey, leangenes_params["BATCH_SIZE"], filename)
+    print("RETURN FROM SENDING READS.")
 
 def unpack_read(next_result, crypto):
     global pmt
@@ -193,7 +211,8 @@ def unpack_read(next_result, crypto):
     sam += (next_result.qname + b"\t")
     sam += (next_result.flag + b"\t")
     sam += (next_result.rname + b"\t")
-    #print(np.where(pmt == int(next_result.pos))[0][0])
+    if debug:
+        print(np.where(pmt == int(next_result.pos))[0][0])
     if next_result.pos != b'0':
         sam += (str(np.where(pmt == int(next_result.pos))[0][0]).encode()  + b"\t")
     else:
@@ -208,18 +227,17 @@ def unpack_read(next_result, crypto):
 
     return (sam, header)
 
-def process_alignment_results(num_reads, crypto, savefile): 
-    global result_socket
+def process_alignment_results(num_reads, crypto, savefile, thread_id): 
+    global result_socket, first_thread_written
 
-    print("Result socket waiting...")
+    print("Thread " + str(thread_id) + ": " + "Result socket waiting...")
 
     num_reads_processed = 0
     sam = b""
-    no_header = True
 
     while num_reads_processed < num_reads:
         #Wait for results
-        result_socket.listen(5)
+        result_socket.listen(100)
         conn, addr = result_socket.accept()
         print("Processing thread receives connection!")
 
@@ -252,26 +270,43 @@ def process_alignment_results(num_reads, crypto, savefile):
 
             num_reads_processed += 1
             if debug: 
-                print(str(num_reads_processed) + " reads processed")
+                print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed")
 
             sam += add_to_sam
-            if (header != b'') and no_header:
+            if thread_id == 0:
                 sam = header + sam
-                no_header = False
 
             data = data[size_len + msg_len:]
             data += conn.recv(1024)
    
         conn.close()
 
-    print(str(num_reads_processed) + " reads processed")
+    print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed")
     print("SAVING SAM FILE @ " + savefile) 
-    #print(sam)
-    conn.close()
-    result_socket.close()
+    
+    if debug:
+        print(sam)
 
-    file = open(savefile, 'wb')
-    file.write(sam)
+    got_file_lock = False
+    while not got_file_lock:
+        if thread_id != 0:
+            while not first_thread_written:
+                time.sleep(0.5)
+
+        got_file_lock = write_sam_lock.acquire()
+        if got_file_lock:
+            if debug:
+                print("Thread " + str(thread_id) + ": " + "Got file write lock.")
+
+            if thread_id == 0:
+                file = open(savefile, 'wb')
+                first_thread_written = True
+            else:
+                file = open(savefile, 'ab')
+            
+            file.write(sam)
+            file.close()
+    write_sam_lock.release()
 
 def main():
     global result_socket, pmt
@@ -313,6 +348,7 @@ def main():
             else:
                 print("CLIENT ERROR. PLEASE RESTART.")
 
+    return
     #print("Exiting client.")
     #result_socket.close()
 
