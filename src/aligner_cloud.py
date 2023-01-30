@@ -140,8 +140,8 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
-            if len(unmatched_reads) > leangenes_params["BATCH_SIZE"]: 
-                if unmatched_read_counter and (unmatched_read_counter % (leangenes_params["BATCH_SIZE"]) == 0): 
+            if len(unmatched_reads) > leangenes_params["BWA_BATCH_SIZE"]: 
+                if unmatched_read_counter and (unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0): 
                     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                     
@@ -260,8 +260,6 @@ def aggregate_alignment_results(num_unmatched, num_matched):
     if debug:
         print("-->Aggregator sending data!") 
  
-    batch_count = 0
-
     #We want atomic pops from the lists!
     got_unmatch_lock = False
     while not got_unmatch_lock:
@@ -285,22 +283,9 @@ def aggregate_alignment_results(num_unmatched, num_matched):
                 if debug:
                     print("---> Unmatched result back to client.")
 
-                batch_count += 1
-                if batch_count == leangenes_params["BATCH_SIZE"]:
-                    result_socket.close()
-                    batch_count = 0
-
-                    if unmatched_aggregate < real_unmatched:
-                        result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
-
             unmatched_lock.release()
             if debug:
                 print("Release unmatch lock.")
-
-    if not batch_count:
-        result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
 
     #Atomic pops, pt 2
     got_match_lock = False
@@ -325,21 +310,11 @@ def aggregate_alignment_results(num_unmatched, num_matched):
                 if debug:
                     print("---> Matched result back to client.")
 
-                batch_count += 1
-                if batch_count == leangenes_params["BATCH_SIZE"]:
-                    result_socket.close()
-                    batch_count = 0
-                    
-                    if matched_aggregate < real_matched:
-                        result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
-
             matched_lock.release()
             if debug:
                 print("Release match lock.")
 
-    if batch_count:
-        result_socket.close()
+    result_socket.close()
 
     return True
 

@@ -375,7 +375,7 @@ def main():
 
     ref_length = genome_params["REF_LENGTH"]
     read_length = genome_params["READ_LENGTH"]
-    batch_size = leangenes_params["BATCH_SIZE"]	
+    batch_size = leangenes_params["BWA_BATCH_SIZE"]	
     serialized_read_size = genome_params["SERIALIZED_READ_SIZE"]
 
     #Network parameters
@@ -385,7 +385,9 @@ def main():
     print("Generate PMT permutation")
     #pmt = gen_permutation(ref_length, read_length)
     pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(ref_length)
-    #print(pmt)
+    if debug:    
+        print(pmt)
+    print("... PMT is generated!")
 
     #PMT generation
     if pmt_transfer:

@@ -197,7 +197,7 @@ def send_read_wrapper(server_ip, read_port, filename):
     read_socket.connect((server_ip, read_port))
 
     print("Parsing fastq...")
-    send_reads(read_socket, crypto, hashkey, leangenes_params["BATCH_SIZE"], filename)
+    send_reads(read_socket, crypto, hashkey, leangenes_params["READ_BATCH_SIZE"], filename)
     print("RETURN FROM SENDING READS.")
 
 def unpack_read(next_result, crypto):
@@ -235,58 +235,55 @@ def process_alignment_results(num_reads, crypto, savefile, thread_id):
     num_reads_processed = 0
     sam = b""
 
-    while num_reads_processed < num_reads:
-        #Wait for results
-        result_socket.listen(100)
-        conn, addr = result_socket.accept()
-        print("Processing thread receives connection!")
+    #while num_reads_processed < num_reads:
+    #Wait for results
+    result_socket.listen(100)
+    conn, addr = result_socket.accept()
+    print("Processing thread " + str(thread_id)  + " receives connection!")
 
-        data = conn.recv(1024) 
-        while data:
-            msg_len, size_len = _DecodeVarint32(data, 0)
+    data = conn.recv(1024) 
+    while data:
+        msg_len, size_len = _DecodeVarint32(data, 0)
 
-            if debug:
-                print("--------Size:")
-                print(msg_len)
+        if debug:
+            print("--------Size:")
+            print(msg_len)
 
-            if (msg_len + size_len > len(data)):
-                data += conn.recv(1024)
-                continue
-
-            result = data[size_len: size_len + msg_len]
-            if debug: 
-                print("-------Result:")
-                print(result)
-            
-            next_result = Result()
-            check_result = next_result.ParseFromString(result)
-        
-            add_to_sam, header = unpack_read(next_result, crypto)
-            if debug: 
-                print("BYTES")
-                print(add_to_sam) 
-                print("STR")
-                print(str(add_to_sam, 'utf-8'))           
-
-            num_reads_processed += 1
-            if debug: 
-                print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed")
-
-            sam += add_to_sam
-            if thread_id == 0:
-                sam = header + sam
-
-            data = data[size_len + msg_len:]
+        if (msg_len + size_len > len(data)):
             data += conn.recv(1024)
-   
-        conn.close()
+            continue
+
+        result = data[size_len: size_len + msg_len]
+        if debug: 
+            print("-------Result:")
+            print(result)
+        
+        next_result = Result()
+        check_result = next_result.ParseFromString(result)
+    
+        add_to_sam, header = unpack_read(next_result, crypto)
+        if debug: 
+            print("BYTES")
+            print(add_to_sam) 
+            print("STR")
+            print(str(add_to_sam, 'utf-8'))           
+
+        num_reads_processed += 1
+        if debug: 
+            print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed so far")
+
+        sam += add_to_sam
+        if thread_id == 0:
+            sam = header + sam
+
+        data = data[size_len + msg_len:]
+        data += conn.recv(1024)
+
+    conn.close()
 
     print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed")
     print("SAVING SAM FILE @ " + savefile) 
     
-    if debug:
-        print(sam)
-
     got_file_lock = False
     while not got_file_lock:
         if thread_id != 0:
