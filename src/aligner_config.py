@@ -1,22 +1,23 @@
 
 global_settings = dict(
     redis_port = 6379,
-    redis_ip = '54.210.209.15',
+    redis_ip = '44.202.64.130',
 )
 
 #IP addresses refer to the machines that each component is connecting to, and not itself
 #Currently, the pubcloud's IP is misleadingly named "server_ip"
 client_settings = dict(
-    server_ip = '54.210.209.15',
+    server_ip = '44.202.64.130',
     pmt_port = 4445,
     read_port = 4444,
     result_port = 4446,
-    debug = False
+    debug = False,
+    results_threads = 4
 )
 
 pubcloud_settings = dict(
-    enclave_ip = '54.210.209.15',
-    client_ip = '54.210.209.15',
+    enclave_ip = '44.202.64.130',
+    client_ip = '44.202.64.130',
     read_port = 4444,
     pmt_client_port = 4445,
     result_port = 4446,
@@ -27,7 +28,7 @@ pubcloud_settings = dict(
 )
 
 enclave_settings = dict(
-    server_ip = '54.210.209.15',
+    server_ip = '44.202.64.130',
     vsock_port = 5006,
     #If this path isn't empty (i.e. BWA is on PATH), make sure it ends with /"
     bwa_path = "../bwa/",

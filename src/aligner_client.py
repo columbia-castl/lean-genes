@@ -17,6 +17,7 @@ from enum import Enum
 from reads_pb2 import Read, PMT_Entry, Result
 from google.protobuf.internal.decoder import _DecodeVarint32
 from _thread import *
+from multiprocessing import pool 
 
 debug = client_settings["debug"]
 mode = "DEBUG"
@@ -38,8 +39,13 @@ read_socket = ""
 
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
+count_reads_lock = threading.Lock()
 write_sam_lock = threading.Lock()
 first_thread_written = False
+
+done_sending = False
+reads_sent = 0
+reads_received = 0
 
 def receive_pmt(pmt_socket):
     pmt = []
@@ -68,16 +74,14 @@ def receive_pmt(pmt_socket):
             break
 
 def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/samples.fq"):
-    global PARSING_STATE
+    global PARSING_STATE, reads_sent, done_sending
 
-    print("\nProcessing reads from fastq: " + filename)
+    print("\n<read sender>: Processing reads from fastq: " + filename)
     read_file = open(filename, "r")
-    read_count = 0
-    find_count = 0
+    reads_sent = 0
 
     serialized_batch = b""
     batch_counter = 0
-    threads_dispatched = 0
 
     crypto_key = b'0' * 32
     crypto = AES.new(crypto_key, AES.MODE_ECB)
@@ -90,7 +94,7 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
 
         if PARSING_STATE == FastqState.READ_LABEL:
             if get_line[0] != "@":
-                print("Error: Fastq is not formatted correctly.")
+                print("<read sender>: Error: fastq is not formatted correctly.")
                 exit()
             else:
                 PARSING_STATE = FastqState.READ_CONTENT
@@ -98,7 +102,7 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
         elif PARSING_STATE == FastqState.READ_CONTENT:
             newread = Read()
             if re.search("A|C|G|T", get_line) != None:
-                read_count += 1
+                reads_sent += 1
                 get_line_bytes = bytes(get_line[:-1], 'utf-8')
                 read_string = get_line
 
@@ -120,20 +124,20 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
                 PARSING_STATE = FastqState.DIV
 
             else:
-                printf("Error: fastq is not formatted correctly.")
+                print("<read sender>: Error: fastq is not formatted correctly.")
                 exit()
 
         elif PARSING_STATE == FastqState.DIV:
             if (get_line[0] != "+") or (len(get_line) > 2):
-                printf("Error: fastq is not formatted correctly.")
+                print("<read sender>: Error: fastq is not formatted correctly.")
                 exit()
             else:
                 PARSING_STATE = FastqState.READ_QUALITY
 
         elif PARSING_STATE == FastqState.READ_QUALITY:
             if (len(get_line) != len(read_string)):
-                printf("Error: fastq is not formatted correctly.")
-
+                print("<read sender>: Error: fastq is not formatted correctly.")
+            
             else:
                 qual_bytes = bytes(get_line[:-1], 'utf-8')
                 qual_string = get_line[:-1]
@@ -154,29 +158,24 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
                     print(serialized_read) 
 
                 if batch_counter == batch_size:
-                    print("-->Batch size reached. Sending to cloud.")
+                    print("<read sender>: -->Batch size reached. Sending to cloud.")
                     socket.send(serialized_batch)
                     batch_counter = 0
                     serialized_batch = b""
-                    t1 = threading.Thread(target=process_alignment_results, args=(batch_size, crypto, filename + ".sam",threads_dispatched,))
-                    t1.start() 
-                    threads_dispatched += 1
                 PARSING_STATE = FastqState.READ_LABEL
 
         else:
-            printf("Error: bad fastq parsing state!")
+            print("<read sender>: " + "Error: bad fastq parsing state!")
             exit()
 
     if batch_counter:
-        print("-->Send final batch to cloud.")
+        print("<read sender>: " + "-->Send final batch to cloud.")
         socket.send(serialized_batch)
         serialized_batch = b""
-        t1 = threading.Thread(target=process_alignment_results, args=(batch_counter, crypto, filename + ".sam",threads_dispatched,))
-        t1.start()
 
-    print(str(read_count) + " reads processed in total.")
-
-
+    done_sending = True
+    print("<read sender>: " + str(reads_sent) + " reads processed in total.")
+    print("<read sender>: CLIENT HAS FINISHED SENDING READS\n")
 def receive_pmt_wrapper(server_ip, pmt_port):
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     pmt_socket.connect((server_ip, pmt_port))
@@ -196,9 +195,17 @@ def send_read_wrapper(server_ip, read_port, filename):
     read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     read_socket.connect((server_ip, read_port))
 
-    print("Parsing fastq...")
-    send_reads(read_socket, crypto, hashkey, leangenes_params["READ_BATCH_SIZE"], filename)
-    print("RETURN FROM SENDING READS.")
+    print("*********************************")
+    print("* RESULTS THREAD POOL INITIATED *")
+    print("*********************************")
+    result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
+    result_manager.start()
+
+    print("*************************")
+    print("* READ SENDER INITIATED *")
+    print("*************************")
+    read_sender = threading.Thread(target=send_reads, args=(read_socket, crypto, hashkey, leangenes_params["READ_BATCH_SIZE"], filename,))
+    read_sender.start()
 
 def unpack_read(next_result, crypto):
     global pmt
@@ -227,10 +234,10 @@ def unpack_read(next_result, crypto):
 
     return (sam, header)
 
-def process_alignment_results(num_reads, crypto, savefile, thread_id): 
+def process_alignment_results(crypto, savefile, thread_id): 
     global result_socket, first_thread_written
 
-    print("Thread " + str(thread_id) + ": " + "Result socket waiting...")
+    print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
 
     num_reads_processed = 0
     sam = b""
@@ -239,7 +246,7 @@ def process_alignment_results(num_reads, crypto, savefile, thread_id):
     #Wait for results
     result_socket.listen(100)
     conn, addr = result_socket.accept()
-    print("Processing thread " + str(thread_id)  + " receives connection!")
+    print("<results>: Processing thread " + str(thread_id)  + " receives connection!")
 
     data = conn.recv(1024) 
     while data:
@@ -270,7 +277,7 @@ def process_alignment_results(num_reads, crypto, savefile, thread_id):
 
         num_reads_processed += 1
         if debug: 
-            print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed so far")
+            print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed so far")
 
         sam += add_to_sam
         if thread_id == 0:
@@ -281,8 +288,8 @@ def process_alignment_results(num_reads, crypto, savefile, thread_id):
 
     conn.close()
 
-    print("Thread " + str(thread_id) + ": " + str(num_reads_processed) + " reads processed")
-    print("SAVING SAM FILE @ " + savefile) 
+    print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed")
+    print("<results>: Thread " + str(thread_id) + " -- " + "SAVING SAM RESULTS IN " + savefile) 
     
     got_file_lock = False
     while not got_file_lock:
@@ -304,6 +311,29 @@ def process_alignment_results(num_reads, crypto, savefile, thread_id):
             file.write(sam)
             file.close()
     write_sam_lock.release()
+
+    return num_reads_processed
+
+def track_reads_received(crypto, savefile):
+    global reads_received, reads_sent, done_sending
+    threads_available = client_settings["results_threads"]
+    thread_counter = 0
+
+    result_pool = pool.ThreadPool(processes=client_settings["results_threads"])
+    thread_result = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, 0))
+    threads_available -= 1
+    thread_counter += 1
+
+    while not done_sending:
+        pass
+
+    while reads_received < reads_sent:
+        reads_received += thread_result.get()
+        thread_result = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, thread_counter,))
+        thread_counter += 1
+
+    result_pool.close()
+    print("Result threads pool shut down successfully")
 
 def main():
     global result_socket, pmt
