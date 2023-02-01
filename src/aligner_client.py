@@ -320,17 +320,25 @@ def track_reads_received(crypto, savefile):
     thread_counter = 0
 
     result_pool = pool.ThreadPool(processes=client_settings["results_threads"])
-    thread_result = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, 0))
-    threads_available -= 1
-    thread_counter += 1
+    
+    #NOTE:  This is more concise, but iterating through 'result_counts' will block if ANY thread isn't finished
+    #       We would like to dynamically check threads then kill the pool when all results are received
+    #thread_args = [(crypto, savefile, i) for i in range(client_settings["results_threads"])]
+    #result_counts = result_pool.starmap_async(process_alignment_results, thread_args)
 
+    separable_results = [] 
+    for i in range(client_settings["results_threads"]):
+        result_count = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, thread_counter))
+        separable_results.append(result_count) 
+        thread_counter += 1
+    
     while not done_sending:
         pass
 
-    while reads_received < reads_sent:
-        reads_received += thread_result.get()
-        thread_result = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, thread_counter,))
-        thread_counter += 1
+    for result_count in separable_results:
+        reads_received += result_count.get()
+        if reads_received >= reads_sent:
+            break
 
     result_pool.close()
     print("Result threads pool shut down successfully")
