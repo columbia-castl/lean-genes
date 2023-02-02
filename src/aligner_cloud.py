@@ -6,9 +6,9 @@ import threading
 
 from aligner_config import global_settings, pubcloud_settings, genome_params, leangenes_params
 from reads_pb2 import Read, PMT_Entry, Result
+from multiprocessing import pool
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from _thread import *
 from google.protobuf.internal.encoder import _VarintBytes
 from google.protobuf.internal.decoder import _DecodeVarint32
 from vsock_handlers import VsockStream
@@ -126,9 +126,11 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 if read_found != None:
                     if debug: 
                         print("Exact match read found.")
+                        print("exact: " + str(exact_read_counter))
                     
                     #assemble SAM entry
                     exact_read_counter += 1
+
                     if debug: 
                         print("Match at: " + str(read_found, 'utf-8'))
                     serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
@@ -137,11 +139,12 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 else:
                     if debug: 
                         print("Read was not exact match.")
+                        print("unmatched: " + str(unmatched_read_counter))
                     unmatched_read_counter += 1
                     unmatched_reads.append(data)                
 
-            if len(unmatched_reads) > leangenes_params["BWA_BATCH_SIZE"]: 
-                if unmatched_read_counter and (unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0): 
+            if len(unmatched_reads) >= leangenes_params["BWA_BATCH_SIZE"]: 
+                if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
                     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                     
@@ -195,55 +198,48 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
 
     return (_VarintBytes(new_result.ByteSize()), new_result.SerializeToString())
         
-def get_bwa_results():
+def get_bwa_results(bwa_socket):
     global serialized_unmatches
 
     print("ENCLAVE SIDE THREAD STARTS")
 
-    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    bwa_socket.bind(('', pubcloud_settings["bwa_port"]))
-
     while True:
-        bwa_socket.listen()
+        bwa_socket.listen(10)
         conn, addr = bwa_socket.accept()
 
         if debug:
             print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
+        
+        data = b''
+        while True:
+            data += conn.recv(10000)
 
-        data = conn.recv(1024) 
-        while data:
-             
             if data == b'':
                 break
 
-            #This segment of code to handle freak case that it doesn't read the whole msg size varint
-            #May need to put in other areas where this is done in this code
-            size_retrieved = False
-            msg_len = 0
-            size_len = 0
-            while not size_retrieved: 
-                try:
-                    msg_len, size_len = _DecodeVarint32(data, 0)
-                    size_retrieved = True
-                except IndexError:
-                    data += conn.recv(10)
+            msg_len, size_len = _DecodeVarint32(data, 0)
                     
             if (msg_len + size_len > len(data)):
-                data += conn.recv(1024)
+                data += conn.recv(10000)
                 continue
 
             serialized_unmatches.append((data[0:size_len], data[size_len: msg_len + size_len]))
+            if debug:
+                print("\nAPPEND TO UNMATCHES",data[size_len: msg_len+size_len])
+                print("size_len", size_len)
+                print("msg_len", msg_len) 
             data = data[msg_len + size_len:]
 
         conn.close()
-        start_new_thread(aggregate_alignment_results, (len(serialized_unmatches), len(serialized_matches),))
+        result_aggregate_thread = threading.Thread(target=aggregate_alignment_results, args=(len(serialized_unmatches), len(serialized_matches),))
+        result_aggregate_thread.start()
 
 def aggregate_alignment_results(num_unmatched, num_matched):
     global serialized_matches, serialized_unmatches
     global matched_lock, unmatched_lock
 
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result_socket.settimeout(10)
+    #result_socket.settimeout(10)
 
     if (num_unmatched == 0) and (num_matched == 0):
         return True
@@ -277,7 +273,9 @@ def aggregate_alignment_results(num_unmatched, num_matched):
                 unmatch_buf = serialized_unmatches.pop()
                 result_socket.send(unmatch_buf[0])
                 result_socket.send(unmatch_buf[1])
-               
+                if debug: 
+                    print("result: ", unmatch_buf[1]) 
+                    print("size: ", len(unmatch_buf[0]))
                 unmatched_aggregate += 1
                 
                 if debug:
@@ -350,13 +348,25 @@ def main():
     if not pubcloud_settings["only_indexing"]:
         print("\n")
         print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
-        from_client_thread = start_new_thread(receive_reads, (serialized_read_size, crypto, redis_table,))
-        from_enclave_thread = start_new_thread(get_bwa_results, ())
+        from_client_thread = threading.Thread(target=receive_reads, args= (serialized_read_size, crypto, redis_table,))
+        from_client_thread.start()        
+
+        bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        bwa_socket.bind(('', pubcloud_settings["bwa_port"]))
+        
+        from_enclave_thread = threading.Thread(target=get_bwa_results, args= (bwa_socket,))
+        from_enclave_thread.start()
+
+        #bwa_socket_list = [bwa_socket for i in range(1)]
+        #bwa_pool = pool.ThreadPool(processes=1)
+        #bwa_pool.map(get_bwa_results, bwa_socket_list)
+        #bwa_pool.close()
+
     else:
         print("You have activated LeanGenes in ONLY INDEXING mode!")
 
     while True:
-        x = 1
+        pass 
 
 if __name__ == "__main__":
     main()

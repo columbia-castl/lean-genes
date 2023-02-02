@@ -10,6 +10,7 @@ import socket
 import time
 import os
 import numpy as np
+import threading
 
 from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params, secret_settings
 from subprocess import Popen, PIPE, STDOUT
@@ -124,6 +125,7 @@ def sam_sender(sam_data):
     crypto_key = b'0' * 32
     crypto = AES.new(crypto_key, AES.MODE_ECB)
 
+    result_counter = 0
     for line in sam_lines:
         if PARSING_STATE == SamState.PROCESSING_HEADER:
             if line[0] == 64: #ASCII for @
@@ -133,11 +135,15 @@ def sam_sender(sam_data):
                 result_tuple = process_read(new_result, sep_read, crypto)
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
+                if debug:    
+                    print("BWA SOCK sends result: ", result_tuple[1])
+                    print("BWA SOCK sends size: ", result_tuple[0])
                 PARSING_STATE = SamState.PROCESSING_READS
 
                 if debug:
-                    print("----> Sending result back to cloud")
+                    print("----> Sending result " + str(result_counter) + " back to cloud")
                     print(result_tuple)
+                result_counter += 1
 
         elif PARSING_STATE == SamState.PROCESSING_READS:
             sep_read = line.split(b'\t')
@@ -147,8 +153,11 @@ def sam_sender(sam_data):
                 bwa_socket.send(result_tuple[0])
                 bwa_socket.send(result_tuple[1])
 
-                #print("----> Sending result")
-                #print(result_tuple)
+                if debug:
+                    print("----> Sending result " + str(result_counter) + " back to cloud")
+                    print(result_tuple)
+                result_counter += 1
+
         else:
             printf("ERROR: Unexpected SAM parsing state")
 
@@ -337,11 +346,13 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
             while len(data) < serialized_read_size:
                 data += conn.recv(serialized_read_size - len(data))
-                print("Data now len " + str(len(data)))
+                if debug: 
+                    print("Data now len " + str(len(data)))
 
             check_read = read_parser.ParseFromString(data)
 
             unmatched_counter += 1
+            #print(unmatched_counter) 
             unmatched_fastq += (anonymized_label + "\n")
 
             read_size = genome_params["READ_LENGTH"]
@@ -349,26 +360,31 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             unmatched_fastq += "+\n"
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
-            if unmatched_counter % batch_size == 0:
-                #WHERE BWA IS CALLED 
-                returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
-                if debug: 
-                    print(returned_sam)
-                    print("BWA RETURNS ^^")
-                sam_sender(returned_sam) 
-                unmatched_fastq = ""
+            #if unmatched_counter % batch_size == 0:
+            #    result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
+            #    result_thread.start() 
+            #    unmatched_fastq = ""
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
         if unmatched_counter % batch_size: 
             if debug:
                 print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
             if unmatched_fastq != "":
-                returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, bytes(unmatched_fastq, 'utf-8'))
-                sam_sender(returned_sam)
+                result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
+                result_thread.start() 
                 unmatched_fastq = ""
 
-        conn.close()                
+        conn.close()    
 
+def send_back_results(fasta_path, fastq_bytes):
+    #WHERE BWA IS CALLED
+    print("<enclave>: --> sending back result batch!")
+    returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
+    if debug: 
+        print(returned_sam)
+        print("BWA RETURNS ^^")
+    sam_sender(returned_sam) 
+    
 
 def main():
     global pmt

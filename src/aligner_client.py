@@ -16,7 +16,6 @@ from Crypto.Util import Counter
 from enum import Enum
 from reads_pb2 import Read, PMT_Entry, Result
 from google.protobuf.internal.decoder import _DecodeVarint32
-from _thread import *
 from multiprocessing import pool 
 
 debug = client_settings["debug"]
@@ -45,7 +44,6 @@ first_thread_written = False
 
 done_sending = False
 reads_sent = 0
-reads_received = 0
 
 def receive_pmt(pmt_socket):
     pmt = []
@@ -73,7 +71,7 @@ def receive_pmt(pmt_socket):
         if not data:
             break
 
-def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/samples.fq"):
+def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
     global PARSING_STATE, reads_sent, done_sending
 
     print("\n<read sender>: Processing reads from fastq: " + filename)
@@ -85,7 +83,10 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
 
     crypto_key = b'0' * 32
     crypto = AES.new(crypto_key, AES.MODE_ECB)
- 
+
+    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    read_socket.connect((client_settings["server_ip"], client_settings["read_port"]))
+
     while True:
         get_line = read_file.readline()
         
@@ -150,18 +151,26 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
                 #print(qual_string)
 
                 serialized_read = newread.SerializeToString()
-                serialized_batch += serialized_read
+                read_socket.send(serialized_read) 
+                #serialized_batch += serialized_read
                 batch_counter += 1
 
                 if debug:
                     print("Serialized read size: " + str(len(serialized_read)))
                     print(serialized_read) 
 
-                if batch_counter == batch_size:
+                if batch_counter % leangenes_params["READ_BATCH_SIZE"] == 0:
                     print("<read sender>: -->Batch size reached. Sending to cloud.")
-                    socket.send(serialized_batch)
-                    batch_counter = 0
+                     
+                    #read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    #read_socket.connect((client_settings["server_ip"], client_settings["read_port"]))
+                    #read_socket.send(serialized_batch)
+                    #read_socket.close()
+                    
+                    #batch_counter = 0
+                    print(batch_counter)
                     serialized_batch = b""
+                
                 PARSING_STATE = FastqState.READ_LABEL
 
         else:
@@ -170,18 +179,19 @@ def send_reads(socket, encrypter, hashkey, batch_size, filename="../test_data/sa
 
     if batch_counter:
         print("<read sender>: " + "-->Send final batch to cloud.")
-        socket.send(serialized_batch)
+        #socket.send(serialized_batch)
         serialized_batch = b""
 
     done_sending = True
     print("<read sender>: " + str(reads_sent) + " reads processed in total.")
     print("<read sender>: CLIENT HAS FINISHED SENDING READS\n")
-def receive_pmt_wrapper(server_ip, pmt_port):
+
+def receive_pmt_wrapper():
     pmt_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    pmt_socket.connect((server_ip, pmt_port))
+    pmt_socket.connect((client_settings["server_ip"], client_settings["pmt_port"]))
     receive_pmt(pmt_socket)
 
-def send_read_wrapper(server_ip, read_port, filename): 
+def send_read_wrapper(filename): 
     if mode == "DEBUG":
         hashkey = b'0' * 32
         cipherkey = b'0' * 32
@@ -192,9 +202,6 @@ def send_read_wrapper(server_ip, read_port, filename):
     #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
 
-    read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    read_socket.connect((server_ip, read_port))
-
     print("*********************************")
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
@@ -204,7 +211,7 @@ def send_read_wrapper(server_ip, read_port, filename):
     print("*************************")
     print("* READ SENDER INITIATED *")
     print("*************************")
-    read_sender = threading.Thread(target=send_reads, args=(read_socket, crypto, hashkey, leangenes_params["READ_BATCH_SIZE"], filename,))
+    read_sender = threading.Thread(target=send_reads, args=(crypto, hashkey, filename,))
     read_sender.start()
 
 def unpack_read(next_result, crypto):
@@ -248,7 +255,7 @@ def process_alignment_results(crypto, savefile, thread_id):
     conn, addr = result_socket.accept()
     print("<results>: Processing thread " + str(thread_id)  + " receives connection!")
 
-    data = conn.recv(1024) 
+    data = conn.recv(10000) 
     while data:
         msg_len, size_len = _DecodeVarint32(data, 0)
 
@@ -257,7 +264,7 @@ def process_alignment_results(crypto, savefile, thread_id):
             print(msg_len)
 
         if (msg_len + size_len > len(data)):
-            data += conn.recv(1024)
+            data += conn.recv(10000)
             continue
 
         result = data[size_len: size_len + msg_len]
@@ -284,7 +291,7 @@ def process_alignment_results(crypto, savefile, thread_id):
             sam = header + sam
 
         data = data[size_len + msg_len:]
-        data += conn.recv(1024)
+        data += conn.recv(10000)
 
     conn.close()
 
@@ -315,9 +322,10 @@ def process_alignment_results(crypto, savefile, thread_id):
     return num_reads_processed
 
 def track_reads_received(crypto, savefile):
-    global reads_received, reads_sent, done_sending
+    global reads_sent, done_sending
     threads_available = client_settings["results_threads"]
     thread_counter = 0
+    reads_received = 0
 
     result_pool = pool.ThreadPool(processes=client_settings["results_threads"])
     
@@ -340,19 +348,15 @@ def track_reads_received(crypto, savefile):
         if reads_received >= reads_sent:
             break
 
+    print("Client has received " + str(reads_received))
     result_pool.close()
     print("Result threads pool shut down successfully")
 
 def main():
     global result_socket, pmt
 
-    server_ip = client_settings["server_ip"]
-    pmt_port = client_settings["pmt_port"]
-    read_port = client_settings["read_port"]
-    result_port = client_settings["result_port"]
-
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result_socket.bind(('', result_port))
+    result_socket.bind(('', client_settings["result_port"]))
 
     pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
     if debug:
@@ -362,7 +366,7 @@ def main():
     print("Client initialized")
     if len(sys.argv) > 1:
         readfile = sys.argv[1]
-        send_read_wrapper(server_ip, read_port, readfile)
+        send_read_wrapper(readfile)
     else:
         command_str = ""
         while True:
@@ -374,10 +378,10 @@ def main():
                 for command in client_commands:
                     print("\t" + command)
             elif command_str == "get_pmt":
-                receive_pmt_wrapper(server_ip, pmt_port)
+                receive_pmt_wrapper()
             elif command_str == "send_reads":
                 readfile = input("\tEnter path to fastq: ")
-                send_read_wrapper(server_ip, read_port, readfile)
+                send_read_wrapper(readfile)
             elif command_str == "stop":
                 break
             else:
