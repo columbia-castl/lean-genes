@@ -360,10 +360,10 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             unmatched_fastq += "+\n"
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
-            #if unmatched_counter % batch_size == 0:
-            #    result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
-            #    result_thread.start() 
-            #    unmatched_fastq = ""
+            if unmatched_counter % batch_size == 0:
+                result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
+                result_thread.start() 
+                unmatched_fastq = ""
 
         #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
         if unmatched_counter % batch_size: 
