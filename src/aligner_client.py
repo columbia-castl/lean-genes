@@ -248,6 +248,7 @@ def process_alignment_results(crypto, savefile, thread_id):
 
     num_reads_processed = 0
     sam = b""
+    first_thread_header = False
 
     #while num_reads_processed < num_reads:
     #Wait for results
@@ -287,8 +288,9 @@ def process_alignment_results(crypto, savefile, thread_id):
             print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed so far")
 
         sam += add_to_sam
-        if thread_id == 0:
+        if thread_id == 0 and (not first_thread_header):
             sam = header + sam
+            first_thread_header = True
 
         data = data[size_len + msg_len:]
         data += conn.recv(10000)
@@ -348,7 +350,7 @@ def track_reads_received(crypto, savefile):
         if reads_received >= reads_sent:
             break
 
-    print("Client has received " + str(reads_received))
+    print("Client has received " + str(reads_received) + " reads")
     result_pool.close()
     print("Result threads pool shut down successfully")
 
