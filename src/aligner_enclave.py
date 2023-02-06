@@ -112,6 +112,9 @@ def sam_sender(sam_data):
     if sam_data == b'':
         return ''
 
+    if debug: 
+        print("\tSAM SENDER RECEIVES: ", sam_data)
+
     new_result = Result()
     sam_lines = sam_data.split(b'\n')
     sep_read = b''
@@ -356,7 +359,12 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             unmatched_fastq += (anonymized_label + "\n")
 
             read_size = genome_params["READ_LENGTH"]
-            unmatched_fastq += str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8') + "\n"
+            read_from_cloud = str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8')
+            unmatched_fastq += read_from_cloud + "\n"
+            if debug: 
+                print("From the cloud we get this read: ",read_from_cloud)
+                print("It has len: ", len(read_from_cloud))
+
             unmatched_fastq += "+\n"
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
@@ -379,6 +387,8 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 def send_back_results(fasta_path, fastq_bytes):
     #WHERE BWA IS CALLED
     print("<enclave>: --> sending back result batch!")
+    if debug: 
+        print("FASTQ: ", fastq_bytes)
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
     if debug: 
         print(returned_sam)

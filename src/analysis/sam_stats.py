@@ -1,10 +1,26 @@
 import sys
 
 def main():
-    sam_file = sys.argv[1]
-    sam = open(sam_file, 'r')
 
-    header_len = 3
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python3 sam_stats.py <fastq> <--no-header>")
+        exit() 
+    elif len(sys.argv) == 3 and sys.argv[2] != "--no-header":
+        print("Usage: python3 sam_stats.py <fastq> <--no-header>")
+        exit()
+
+    sam_file = sys.argv[1]
+    try: 
+        sam = open(sam_file, 'r')
+    except FileNotFoundError:
+        print("This SAM file not found.")
+        exit()
+
+    if len(sys.argv) == 3 and sys.argv[2] == "--no-header":
+        header_len = 0
+    else:
+        header_len = 3
+    
     for i in range(header_len):
         sam.readline()
 
