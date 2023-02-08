@@ -1,89 +1,77 @@
 #!/usr/bin/python3
 import sys
-import nltk
 
-fastq_set = []
-sam_set = []
-sam_origin = []
+bwa_sam = []
+lg_sam = []
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: python3 sam_verifier.py <fastq> <sam>")
+        print("Usage: python3 sam_verifier.py <bwa_sam> <lg_sam>")
         exit()
 
-    fastq = sys.argv[1]
-    fq_file = open(fastq, 'r')
-
-    fastq_lines = fq_file.readlines()
-    append_next = False
-    for line in fastq_lines:
-        if line[0] == "@":
-            append_next = True
-        elif append_next:
-            fastq_set.append(line[:-1])
-            append_next = False
-    fq_file.close()
-
-    #print("READS FROM FASTQ:\n")
-    #print(fastq_set)
-
-    sam = sys.argv[2]
-    sam_file = open(sam, 'r')
-
-    result = sam_file.readline()
+    b_sam = sys.argv[1]
+    b_file = open(b_sam, 'r')
+    result = b_file.readline()
     while result:
         if result[0] == "@":
             pass
         else:
-            sam_set.append(result.split('\t')[9])
-            #print(len(sam_set[-1])) 
-        result = sam_file.readline()
-    sam_file.close()
+            bwa_sam.append(result.split('\t')[9])
+        result = b_file.readline()
+    b_file.close()
 
-    #print("READS FROM SAM:\n")
-    #print(sam_set)
-    
+    l_sam = sys.argv[2]
+    lg_file = open(l_sam, 'r')
+
+    result = lg_file.readline()
+    while result:
+        if result[0] == "@":
+            pass
+        else:
+            lg_sam.append(result.split('\t')[9])
+            #print(len(lg_sam[-1])) 
+        result = lg_file.readline()
+    lg_file.close()
+
     read_count = 0
     not_count = 0
-    all_in_sam = True
+    all_in_lg = True
     no_duplicates = True
-    for read in fastq_set:
+    for read in bwa_sam:
         read_count += 1
-        if read not in sam_set:
-            print("!!! Read " + str(read_count) + " not in SAM!")
-            edit_dist = [nltk.edit_distance(read, sam_read) for sam_read in sam_set]
-            print(min(edit_dist), " is minimum edit distance.") 
-            all_in_sam = False
+        if read not in lg_sam:
+            print("!!! Read " + str(read_count) + " from BWA SAM not found in LEAN-GENES SAM!")
+            all_in_lg = False
             not_count += 1
         else:
             duplicate_count = -1
-            while read in sam_set:
-                sam_set.remove(read)
+            while read in lg_sam:
+                lg_sam.remove(read)
                 duplicate_count += 1
             if duplicate_count:
-                print("!!! Read " + str(read_count) + " duplicated in SAM!")
+                print("!!! Read " + str(read_count) + " duplicated in LEAN-GENES SAM!")
                 print("Num duplicates: ", duplicate_count)
                 no_duplicates = False 
 
-    not_in_fastq = False
-    if len(sam_set) > 0:
-        not_in_fastq = True
-        #print("Leftover reads =", len(sam_set))
-    for leftover_read in sam_set:
+    not_in_bwa = False
+    if len(lg_sam) > 0:
+        not_in_bwa = True
+        #print("Leftover reads =", len(lg_sam))
+    for leftover_read in lg_sam:
         #print("LEFTOVER READ: ", leftover_read)
         pass
 
     print("***************************") 
-    if all_in_sam:
-        print("All reads from FASTQ in SAM")
+    if all_in_lg:
+        print("All reads from BWA SAM in LEAN-GENES SAM")
     else:
-        print(not_count, " reads were not in the SAM")
+        print(not_count, " reads were not in the LEAN-GENES SAM")
     if no_duplicates:
-        print("No duplicate reads in SAM")
+        print("No duplicate reads in LEAN-GENES SAM")
     else:
         print("The SAM had duplicate reads!!!")
-    if not_in_fastq:
-        print("The SAM contained " + str(len(sam_set)) + " reads not in the FASTQ")
+    if not_in_bwa:
+        print("The SAM contained " + str(len(lg_sam)) + " reads not produced in BWA SAM")
     print("***************************") 
 
 if __name__ == "__main__":
