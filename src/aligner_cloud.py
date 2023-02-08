@@ -120,28 +120,34 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if debug:
                 decrypted_data = crypto.decrypt(read_parser.read)
 
-	        #Sanity check, avoid looking in db for connection-ending/malformed msgs
-            if len(read_parser.hash) > 0:
-                read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
-                if read_found != None:
-                    if debug: 
-                        print("Exact match read found.")
-                        print("exact: " + str(exact_read_counter))
-                    
-                    #assemble SAM entry
-                    exact_read_counter += 1
+            if pubcloud_settings["disable_exact_matching"]:
+                unmatched_read_counter += 1
+                unmatched_reads.append(data)
+                if debug: 
+                    print("Storing data for enclave [no matching check performed].")
+            else:
+                #Sanity check, avoid looking in db for connection-ending/malformed msgs
+                if len(read_parser.hash) > 0:
+                    read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+                    if read_found != None:
+                        if debug: 
+                            print("Exact match read found.")
+                            print("exact: " + str(exact_read_counter))
+                        
+                        #assemble SAM entry
+                        exact_read_counter += 1
 
-                    if debug: 
-                        print("Match at: " + str(read_found, 'utf-8'))
-                    serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
-                    serialized_matches.append(serialized_match)
-                    #print("\t-->Serialized match appended")
-                else:
-                    if debug: 
-                        print("Read was not exact match.")
-                        print("unmatched: " + str(unmatched_read_counter))
-                    unmatched_read_counter += 1
-                    unmatched_reads.append(data)                
+                        if debug: 
+                            print("Match at: " + str(read_found, 'utf-8'))
+                        serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
+                        serialized_matches.append(serialized_match)
+                        #print("\t-->Serialized match appended")
+                    else:
+                        if debug: 
+                            print("Read was not exact match.")
+                            print("unmatched: " + str(unmatched_read_counter))
+                        unmatched_read_counter += 1
+                        unmatched_reads.append(data)                
 
             if len(unmatched_reads) >= leangenes_params["BWA_BATCH_SIZE"]: 
                 if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
@@ -344,7 +350,12 @@ def main():
     run_redis_server()
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
-  
+
+    if pubcloud_settings["disable_exact_matching"]:
+        print("**************************************************************")
+        print("You have disabled the LEAN-GENES exact matching functionality!")
+        print("**************************************************************")
+    
     if not pubcloud_settings["only_indexing"]:
         print("\n")
         print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")
@@ -363,7 +374,9 @@ def main():
         #bwa_pool.close()
 
     else:
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~") 
         print("You have activated LeanGenes in ONLY INDEXING mode!")
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
     while True:
         pass 
