@@ -328,7 +328,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
     anonymized_label = "@unlabeled"
 
     while True: 
-        unmatched_socket.listen(5)
+        unmatched_socket.listen()
         conn, addr = unmatched_socket.accept()
 
         #TODO: Real crypto key management
@@ -338,7 +338,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
         print("CONNECTION TO PUBCLOUD ESTABLISHED")
 
-        while True:
+        while True: 
             data = conn.recv(serialized_read_size) 
             
             if debug:
@@ -355,7 +355,6 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             check_read = read_parser.ParseFromString(data)
 
             unmatched_counter += 1
-            #print(unmatched_counter) 
             unmatched_fastq += (anonymized_label + "\n")
 
             read_size = genome_params["READ_LENGTH"]
@@ -368,25 +367,19 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             unmatched_fastq += "+\n"
             unmatched_fastq += str(read_parser.align_score) + "\n"
 
-            if unmatched_counter % batch_size == 0:
-                result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
-                result_thread.start() 
-                unmatched_fastq = ""
-
-        #FLUSH LAST READS IF UNALIGNED W BATCH SIZE
-        if unmatched_counter % batch_size: 
-            if debug:
-                print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
-            if unmatched_fastq != "":
-                result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),)) 
-                result_thread.start() 
-                unmatched_fastq = ""
+        #FLUSH READS
+        if debug:
+            print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
+        if unmatched_fastq != "":
+            result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter,)) 
+            result_thread.start() 
+            unmatched_fastq = ""
 
         conn.close()    
 
-def send_back_results(fasta_path, fastq_bytes):
+def send_back_results(fasta_path, fastq_bytes, num_reads):
     #WHERE BWA IS CALLED
-    print("<enclave>: --> sending back result batch!")
+    print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
     if debug: 
         print("FASTQ: ", fastq_bytes)
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)

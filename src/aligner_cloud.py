@@ -3,6 +3,7 @@ import redis
 import socket
 import os
 import threading
+import queue
 
 from aligner_config import global_settings, pubcloud_settings, genome_params, leangenes_params
 from reads_pb2 import Read, PMT_Entry, Result
@@ -19,6 +20,8 @@ do_pmt_proxy = False
 
 matched_lock = threading.Lock()
 unmatched_lock = threading.Lock()
+
+unmatched_reads = queue.Queue()
 serialized_matches = []
 serialized_unmatches = []
 
@@ -69,10 +72,9 @@ def pmt_proxy(proxy_port, pmt_client_port):
     return proxy_socket
 
 def receive_reads(serialized_read_size, crypto, redis_table):
-    
     print("CLIENT THREAD STARTED")
 
-    global serialized_matches
+    global serialized_matches, unmatched_reads
 
     read_parser = Read()
 
@@ -86,7 +88,6 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     serialized_matches = []
     #serialized_unmatches = []
     unmatched_read_counter = 0
-    unmatched_reads = []
 
     while True:
         client_socket.listen()
@@ -122,7 +123,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
             if pubcloud_settings["disable_exact_matching"]:
                 unmatched_read_counter += 1
-                unmatched_reads.append(data)
+                unmatched_reads.put(data)
                 if debug: 
                     print("Storing data for enclave [no matching check performed].")
             else:
@@ -147,20 +148,15 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             print("Read was not exact match.")
                             print("unmatched: " + str(unmatched_read_counter))
                         unmatched_read_counter += 1
-                        unmatched_reads.append(data)                
+                        unmatched_reads.put(data)                
 
-            if len(unmatched_reads) >= leangenes_params["BWA_BATCH_SIZE"]: 
+            if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
                 if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
-                    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-                    
-                    if debug:
-                        print("Len of unmatched reads: " + str(len(unmatched_reads)))
-                    for read in unmatched_reads:
-                        unmatched_socket.send(read)
-                    #TODO: CHECK THIS!
-                    unmatched_reads.clear()
-                    unmatched_socket.close()
+                    batch_queue = queue.Queue()
+                    for i in range(leangenes_params["BWA_BATCH_SIZE"]):
+                        batch_queue.put(unmatched_reads.get())
+                    unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(batch_queue,))
+                    unmatch_sender_thread.start()
 
             if debug:
                 print("Data: ")
@@ -172,11 +168,11 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 break
 
         #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
-        if len(unmatched_reads) > 0:
+        if not unmatched_reads.empty() > 0:
             unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"]))
-            while len(unmatched_reads) > 0:
-                unmatched_socket.send(unmatched_reads.pop())
+            while not unmatched_reads.empty():
+                unmatched_socket.send(unmatched_reads.get())
             unmatched_socket.close()
 
         #FLUSH EXTRA EXACT MATCHES
@@ -187,6 +183,21 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
+
+def send_unmatches_to_enclave(unmatches):
+
+    print("<unmatch_sender>: --> sending non-matches to the enclave")
+
+    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+    
+    if debug:
+        print("Len of unmatched reads: ", unmatches.qsize())
+    
+    while not unmatches.empty(): 
+        unmatched_socket.send(unmatches.get())
+
+    unmatched_socket.close()
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result = Result()
@@ -210,13 +221,15 @@ def get_bwa_results(bwa_socket):
     print("ENCLAVE SIDE THREAD STARTS")
 
     while True:
-        bwa_socket.listen(10)
+        bwa_socket.listen()
         conn, addr = bwa_socket.accept()
 
         if debug:
             print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
         
         data = b''
+        num_appended = 0
+
         while True:
             data += conn.recv(10000)
 
@@ -230,6 +243,7 @@ def get_bwa_results(bwa_socket):
                 continue
 
             serialized_unmatches.append((data[0:size_len], data[size_len: msg_len + size_len]))
+            num_appended += 1
             if debug:
                 print("\nAPPEND TO UNMATCHES",data[size_len: msg_len+size_len])
                 print("size_len", size_len)
@@ -237,7 +251,7 @@ def get_bwa_results(bwa_socket):
             data = data[msg_len + size_len:]
 
         conn.close()
-        result_aggregate_thread = threading.Thread(target=aggregate_alignment_results, args=(len(serialized_unmatches), len(serialized_matches),))
+        result_aggregate_thread = threading.Thread(target=aggregate_alignment_results, args=(num_appended, len(serialized_matches),))
         result_aggregate_thread.start()
 
 def aggregate_alignment_results(num_unmatched, num_matched):
@@ -272,6 +286,8 @@ def aggregate_alignment_results(num_unmatched, num_matched):
             real_unmatched = num_unmatched
             if len(serialized_unmatches) < num_unmatched:
                 real_unmatched = len(serialized_unmatches)
+            
+            print("<aggregator>: real_unmatches = ", real_unmatched)
 
             while (unmatched_aggregate < real_unmatched):
                 
@@ -368,6 +384,9 @@ def main():
         from_enclave_thread = threading.Thread(target=get_bwa_results, args= (bwa_socket,))
         from_enclave_thread.start()
 
+        from_enclave_thread = threading.Thread(target=get_bwa_results, args= (bwa_socket,))
+        from_enclave_thread.start()
+        
         #bwa_socket_list = [bwa_socket for i in range(1)]
         #bwa_pool = pool.ThreadPool(processes=1)
         #bwa_pool.map(get_bwa_results, bwa_socket_list)

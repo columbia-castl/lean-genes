@@ -38,10 +38,6 @@ read_socket = ""
 
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
-count_reads_lock = threading.Lock()
-write_sam_lock = threading.Lock()
-first_thread_written = False
-
 done_sending = False
 reads_sent = 0
 
@@ -242,7 +238,7 @@ def unpack_read(next_result, crypto):
     return (sam, header)
 
 def process_alignment_results(crypto, savefile, thread_id): 
-    global result_socket, first_thread_written
+    global result_socket
 
     print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
 
@@ -252,7 +248,7 @@ def process_alignment_results(crypto, savefile, thread_id):
 
     #while num_reads_processed < num_reads:
     #Wait for results
-    result_socket.listen(100)
+    result_socket.listen()
     conn, addr = result_socket.accept()
     print("<results>: Processing thread " + str(thread_id)  + " receives connection!")
 
@@ -298,28 +294,11 @@ def process_alignment_results(crypto, savefile, thread_id):
     conn.close()
 
     print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed")
-    print("<results>: Thread " + str(thread_id) + " -- " + "SAVING SAM RESULTS IN " + savefile) 
+    print("<results>: Thread " + str(thread_id) + " -- " + "SAVING SAM RESULTS IN " + savefile + "_" + str(thread_id)) 
     
-    got_file_lock = False
-    while not got_file_lock:
-        if thread_id != 0:
-            while not first_thread_written:
-                time.sleep(0.5)
-
-        got_file_lock = write_sam_lock.acquire()
-        if got_file_lock:
-            if debug:
-                print("Thread " + str(thread_id) + ": " + "Got file write lock.")
-
-            if thread_id == 0:
-                file = open(savefile, 'wb')
-                first_thread_written = True
-            else:
-                file = open(savefile, 'ab')
-            
-            file.write(sam)
-            file.close()
-    write_sam_lock.release()
+    file = open(savefile + "_" + str(thread_id), 'wb')
+    file.write(sam)
+    file.close()
 
     return num_reads_processed
 
