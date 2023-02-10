@@ -201,7 +201,8 @@ def send_read_wrapper(filename):
     print("*********************************")
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
-    result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
+    #result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
+    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam",)) 
     result_manager.start()
 
     print("*************************")
@@ -237,7 +238,7 @@ def unpack_read(next_result, crypto):
 
     return (sam, header)
 
-def process_alignment_results(crypto, savefile, thread_id): 
+def process_results_thread(crypto, savefile, thread_id): 
     global result_socket
 
     print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
@@ -302,6 +303,66 @@ def process_alignment_results(crypto, savefile, thread_id):
 
     return num_reads_processed
 
+
+def process_results(crypto, savefile, thread_id, conn): 
+    global result_socket
+
+    print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
+
+    num_reads_processed = 0
+    sam = b""
+    first_thread_header = False
+
+    data = conn.recv(10000) 
+    while data:
+        msg_len, size_len = _DecodeVarint32(data, 0)
+
+        if debug:
+            print("--------Size:")
+            print(msg_len)
+
+        if (msg_len + size_len > len(data)):
+            data += conn.recv(10000)
+            continue
+
+        result = data[size_len: size_len + msg_len]
+        if debug: 
+            print("-------Result:")
+            print(result)
+        
+        next_result = Result()
+        check_result = next_result.ParseFromString(result)
+    
+        add_to_sam, header = unpack_read(next_result, crypto)
+        if debug: 
+            print("BYTES")
+            print(add_to_sam) 
+            print("STR")
+            print(str(add_to_sam, 'utf-8'))           
+
+        num_reads_processed += 1
+        if debug: 
+            print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed so far")
+
+        sam += add_to_sam
+        if not first_thread_header:
+            sam = header + sam
+            first_thread_header = True
+
+        data = data[size_len + msg_len:]
+        data += conn.recv(10000)
+
+    conn.close()
+
+    print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed")
+    print("<results>: Thread " + str(thread_id) + " -- " + "SAVING SAM RESULTS IN " + savefile + "_" + str(thread_id)) 
+    
+    file = open(savefile + "_" + str(thread_id), 'wb')
+    file.write(sam)
+    file.close()
+
+    return num_reads_processed
+
 def track_reads_received(crypto, savefile):
     global reads_sent, done_sending
     threads_available = client_settings["results_threads"]
@@ -313,11 +374,11 @@ def track_reads_received(crypto, savefile):
     #NOTE:  This is more concise, but iterating through 'result_counts' will block if ANY thread isn't finished
     #       We would like to dynamically check threads then kill the pool when all results are received
     #thread_args = [(crypto, savefile, i) for i in range(client_settings["results_threads"])]
-    #result_counts = result_pool.starmap_async(process_alignment_results, thread_args)
+    #result_counts = result_pool.starmap_async(process_results_thread, thread_args)
 
     separable_results = [] 
     for i in range(client_settings["results_threads"]):
-        result_count = result_pool.apply_async(process_alignment_results, args=(crypto, savefile, thread_counter))
+        result_count = result_pool.apply_async(process_results_thread, args=(crypto, savefile, thread_counter))
         separable_results.append(result_count) 
         thread_counter += 1
     
@@ -332,6 +393,23 @@ def track_reads_received(crypto, savefile):
     print("Client has received " + str(reads_received) + " reads")
     result_pool.close()
     print("Result threads pool shut down successfully")
+
+def spawn_results_processes(crypto, savefile):
+    global result_socket
+    result_socket.listen()
+
+    thread_counter = 0
+    
+    while True:
+        conn, addr = result_socket.accept()
+        print("<results>: Client receives connection. Spawn result processor")
+
+        pid = os.fork()
+
+        if not pid:
+            process_results(crypto, savefile, thread_counter, conn)
+        else:
+            thread_counter += 1
 
 def main():
     global result_socket, pmt
