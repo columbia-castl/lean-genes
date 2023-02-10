@@ -399,8 +399,11 @@ def spawn_results_processes(crypto, savefile):
     result_socket.listen()
 
     thread_counter = 0
-    
-    while True:
+    num_threads = 8
+
+    processes = []
+
+    while thread_counter < num_threads:
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
 
@@ -408,8 +411,18 @@ def spawn_results_processes(crypto, savefile):
 
         if not pid:
             process_results(crypto, savefile, thread_counter, conn)
+            return
         else:
             thread_counter += 1
+            processes.append(pid)
+
+    #code-maven.com/python-fork-and-wait
+    while processes:
+        pid, exit_code = os.wait()
+        if pid == 0:
+            time.sleep(1)
+        else:
+            processes.remove(pid)
 
 def main():
     global result_socket, pmt
