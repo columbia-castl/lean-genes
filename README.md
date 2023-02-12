@@ -69,6 +69,9 @@ If you do not wish to run the script interactively, provide the FASTQ of reads y
 ##### ``test_data`` folder
 This folder contains some example FASTQ and FASTA files that were used to verify the functionality of this tool before scaling it up to full chromosomes and genomes, as well as some example SAM results created by running the tool previously in tests, etc. for verification.
 
+##### ``src/analysis`` folder
+This folder contains some useful scripts that can perform useful functions like tell you how many reads in a SAM were mapped by lean-genes vs BWA, verify that a SAM from BWA alone has the same results as a SAM including results from lean-genes, and telling you the length of reads/serialized reads in a FASTQ.
+
 #### FAQs 
 1. When running, make sure you check that you have a new enough version of redis
 2. Make sure you have the right version of the protobuf compiler ``protoc``
