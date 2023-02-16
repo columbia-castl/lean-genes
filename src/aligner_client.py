@@ -399,7 +399,7 @@ def spawn_results_processes(crypto, savefile):
     result_socket.listen()
 
     thread_counter = 0
-    num_threads = 8
+    num_threads = client_settings["results_threads"]
 
     processes = []
 

@@ -1,13 +1,13 @@
 
 global_settings = dict(
     redis_port = 6379,
-    redis_ip = '54.166.249.108',
+    redis_ip = '44.211.39.231',
 )
 
 #IP addresses refer to the machines that each component is connecting to, and not itself
 #Currently, the pubcloud's IP is misleadingly named "server_ip"
 client_settings = dict(
-    server_ip = '54.166.249.108',
+    server_ip = '44.211.39.231',
     pmt_port = 4445,
     read_port = 4444,
     result_port = 4446,
@@ -16,8 +16,8 @@ client_settings = dict(
 )
 
 pubcloud_settings = dict(
-    enclave_ip = '54.166.249.108',
-    client_ip = '54.166.249.108',
+    enclave_ip = '44.211.39.231',
+    client_ip = '44.211.39.231',
     read_port = 4444,
     pmt_client_port = 4445,
     result_port = 4446,
@@ -29,13 +29,13 @@ pubcloud_settings = dict(
 )
 
 enclave_settings = dict(
-    server_ip = '54.166.249.108',
+    server_ip = '44.211.39.231',
     vsock_port = 5006,
     #If this path isn't empty (i.e. BWA is on PATH), make sure it ends with /"
     bwa_path = "../bwa/",
     bwa_port = 5007,
-    bwa_index_exists = False,
-    separate_hashing = False,
+    bwa_index_exists = True,
+    separate_hashing = True,
     only_indexing = False,
     hashing_progress_indicator = 1000000,
     debug = False
@@ -47,7 +47,8 @@ secret_settings = dict(
 )
 
 leangenes_params = dict(
-    BWA_BATCH_SIZE = 1500, #Length of FASTQs created by enclave
+    BWA_BATCH_SIZE = 1000, #Length of FASTQs created by enclave
+    LG_BATCH_SIZE = 1000, #Serialized exact match batches 
     READ_BATCH_SIZE = 1000, #How many reads client sends at once
     AES_BLOCK_SIZE = 16
 )
@@ -62,7 +63,7 @@ leangenes_params = dict(
 #read_length = 15
 #serialized = 69
 genome_params = dict(
-    REF_LENGTH = 100, #Length of FASTA sequence
-    READ_LENGTH = 15,  #Length of individual FASTQ reads
-    SERIALIZED_READ_SIZE = 69, #Length of a protobuf message read
+    REF_LENGTH = 48932067, #Length of FASTA sequence
+    READ_LENGTH = 150,  #Length of individual FASTQ reads
+    SERIALIZED_READ_SIZE = 350, #Length of a protobuf message read
 )

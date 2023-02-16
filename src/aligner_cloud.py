@@ -18,8 +18,6 @@ debug = pubcloud_settings["debug"]
 mode = "DEBUG"
 do_pmt_proxy = False
 
-#serialized_matches = []
-
 def client_handler(args): 
     client = VsockStream() 
     endpoint = (args.cid, args.port) 
@@ -70,17 +68,14 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     print("CLIENT THREAD STARTED")
 
     unmatched_reads = queue.Queue()
+    matched_reads = queue.Queue()
     read_parser = Read()
 
-    #Use read size to calc expected bytes for a read
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #client_socket.settimeout(30)
     client_socket.bind(('', pubcloud_settings["read_port"]))
+    
     read_counter = 0
-
     exact_read_counter = 0
-    #serialized_matches = []
-    #serialized_unmatches = []
     unmatched_read_counter = 0
 
     while True:
@@ -129,20 +124,30 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             print("Exact match read found.")
                             print("exact: " + str(exact_read_counter))
                         
-                        #assemble SAM entry
                         exact_read_counter += 1
+                        matched_reads.put((data, read_found))
 
                         if debug: 
                             print("Match at: " + str(read_found, 'utf-8'))
-                        serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
-                        serialized_matches.append(serialized_match)
-                        #print("\t-->Serialized match appended")
+                        
+                        #assemble SAM entry
+                        #serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
+                        #serialized_matches.append(serialized_match)
+
                     else:
                         if debug: 
                             print("Read was not exact match.")
                             print("unmatched: " + str(unmatched_read_counter))
                         unmatched_read_counter += 1
                         unmatched_reads.put(data)                
+
+            if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
+                if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
+                    batch_queue = queue.Queue()
+                    for i in range(leangenes_params["LG_BATCH_SIZE"]):
+                        batch_queue.put(matched_reads.get())
+                    match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue,))
+                    match_serializer_thread.start()
 
             if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
                 if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
@@ -170,7 +175,9 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             unmatched_socket.close()
 
         #FLUSH EXTRA EXACT MATCHES
-        #start_new_thread(send_bwa_results, (0, len(serialized_matches),))
+        if not matched_reads.empty() > 0:
+            match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(matched_reads,))
+            match_serializer_thread.start()
 
         unmatched_read_counter = 0
         exact_read_counter = 0
@@ -192,6 +199,26 @@ def send_unmatches_to_enclave(unmatches):
         unmatched_socket.send(unmatches.get())
 
     unmatched_socket.close()
+
+def serialize_exact_batch(match_queue):
+    serialized_queue = queue.Queue() 
+    read_parser = Read() 
+
+    while not match_queue.empty():
+        read, read_found = match_queue.get()
+        read_parser.ParseFromString(read)
+        serialized_queue.put(serialize_exact_match(read_parser.read, read_parser.align_score, read_found))
+
+    matched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    matched_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
+
+    while not serialized_queue.empty():
+        match_buf = serialized_queue.get()
+        matched_socket.send(match_buf[0])
+        matched_socket.send(match_buf[1])
+
+    matched_socket.close()
+    return True
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result = Result()
@@ -256,12 +283,12 @@ def send_bwa_results(result_queue):
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if debug:
-        print("-->Aggregator thread initiated")
+        print("-->BWA result thread initiated")
 
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
     
     if debug:
-        print("-->Aggregator sending data!") 
+        print("--> Sending BWA result data!") 
  
     while not result_queue.empty():
         
@@ -273,33 +300,6 @@ def send_bwa_results(result_queue):
             print("result: ", unmatch_buf[1]) 
             print("size: ", len(unmatch_buf[0]))
             print("---> Unmatched result back to client.")
-
-    #Atomic pops, pt 2
-    #got_match_lock = False
-    #while not got_match_lock:
-    #    got_match_lock = matched_lock.acquire()
-    #    if got_match_lock:
-    #        if debug: 
-    #            print("Got match lock.")
-    #        real_matched = num_matched
-    #        if len(serialized_matches) < num_matched:
-    #            real_matched = len(serialized_matches)
-
-    #        while (matched_aggregate < real_matched):
-                
-                #Send single exact match back to client
-    #            match_buf = serialized_matches.pop()
-    #            result_socket.send(match_buf[0]) 
-    #            result_socket.send(match_buf[1])
-                
-    #            matched_aggregate += 1
-                
-    #            if debug:
-    #                print("---> Matched result back to client.")
-
-    #        matched_lock.release()
-    #        if debug:
-    #            print("Release match lock.")
 
     result_socket.close()
 
