@@ -187,7 +187,7 @@ def receive_pmt_wrapper():
     pmt_socket.connect((client_settings["server_ip"], client_settings["pmt_port"]))
     receive_pmt(pmt_socket)
 
-def send_read_wrapper(filename): 
+def send_read_wrapper(filename, num_threads): 
     if mode == "DEBUG":
         hashkey = b'0' * 32
         cipherkey = b'0' * 32
@@ -197,12 +197,11 @@ def send_read_wrapper(filename):
    
     #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
-
     print("*********************************")
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
     #result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
-    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam",)) 
+    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam", num_threads)) 
     result_manager.start()
 
     print("*************************")
@@ -345,7 +344,7 @@ def process_results(crypto, savefile, thread_id, conn):
             print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed so far")
 
         sam += add_to_sam
-        if not first_thread_header:
+        if (not first_thread_header) and (thread_id == 0):
             sam = header + sam
             first_thread_header = True
 
@@ -363,6 +362,7 @@ def process_results(crypto, savefile, thread_id, conn):
 
     return num_reads_processed
 
+#This approach used w threads (as opposed to processes)
 def track_reads_received(crypto, savefile):
     global reads_sent, done_sending
     threads_available = client_settings["results_threads"]
@@ -394,12 +394,11 @@ def track_reads_received(crypto, savefile):
     result_pool.close()
     print("Result threads pool shut down successfully")
 
-def spawn_results_processes(crypto, savefile):
+def spawn_results_processes(crypto, savefile, num_threads=client_settings["results_threads"]):
     global result_socket
     result_socket.listen()
 
     thread_counter = 0
-    num_threads = client_settings["results_threads"]
 
     processes = []
 
@@ -437,8 +436,12 @@ def main():
 
     print("Client initialized")
     if len(sys.argv) > 1:
-        readfile = sys.argv[1]
-        send_read_wrapper(readfile)
+        readfile = sys.argv[1] 
+        num_threads = client_settings["results_threads"]
+        if len(sys.argv) > 2:
+            num_threads = int(sys.argv[2])
+
+        send_read_wrapper(readfile, num_threads)
     else:
         command_str = ""
         while True:

@@ -370,10 +370,9 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         #FLUSH READS
         if debug:
             print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
-        if unmatched_fastq != "":
-            result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter,)) 
-            result_thread.start() 
-            unmatched_fastq = ""
+        result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter,)) 
+        result_thread.start() 
+        unmatched_fastq = ""
 
         conn.close()    
 

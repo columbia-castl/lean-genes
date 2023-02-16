@@ -166,18 +166,29 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if not data:
                 break
 
-        #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
-        if not unmatched_reads.empty() > 0:
-            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"]))
-            while not unmatched_reads.empty():
-                unmatched_socket.send(unmatched_reads.get())
-            unmatched_socket.close()
-
         #FLUSH EXTRA EXACT MATCHES
-        if not matched_reads.empty() > 0:
-            match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(matched_reads,))
-            match_serializer_thread.start()
+        if not matched_reads.empty():
+            
+            #match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(matched_reads,))
+            #match_serializer_thread.start()
+            
+            pid = os.fork()
+            if not pid:
+                print("Process is serializing final batch")
+                serialize_exact_batch(matched_reads)
+                exit()
+
+        #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
+        if not unmatched_reads.empty():
+            
+            #unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(unmatched_reads,))
+            #unmatch_sender_thread.start()
+
+            pid = os.fork()
+            if not pid:
+                print("Process sending final batch to enclave")
+                send_unmatches_to_enclave(unmatched_reads)
+                exit()
 
         unmatched_read_counter = 0
         exact_read_counter = 0
@@ -203,6 +214,8 @@ def send_unmatches_to_enclave(unmatches):
 def serialize_exact_batch(match_queue):
     serialized_queue = queue.Queue() 
     read_parser = Read() 
+
+    print("--> <exact match serializer>: serializing an exact batch")
 
     while not match_queue.empty():
         read, read_found = match_queue.get()
@@ -250,7 +263,7 @@ def get_bwa_results(bwa_socket):
         pid = os.fork()
 
         if not pid:
-            print("--> spawn aggregator process")
+            print("--> spawn BWA result process")
             data = b''
             num_appended = 0
 
