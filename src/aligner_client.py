@@ -39,6 +39,8 @@ read_socket = ""
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
 done_sending = False
+done_with_exact = False
+done_with_bwa = False
 reads_sent = 0
 
 def receive_pmt(pmt_socket):
@@ -187,7 +189,7 @@ def receive_pmt_wrapper():
     pmt_socket.connect((client_settings["server_ip"], client_settings["pmt_port"]))
     receive_pmt(pmt_socket)
 
-def send_read_wrapper(filename, num_threads): 
+def send_read_wrapper(filename): 
     if mode == "DEBUG":
         hashkey = b'0' * 32
         cipherkey = b'0' * 32
@@ -201,7 +203,7 @@ def send_read_wrapper(filename, num_threads):
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
     #result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
-    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam", num_threads)) 
+    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam")) 
     result_manager.start()
 
     print("*************************")
@@ -394,15 +396,31 @@ def track_reads_received(crypto, savefile):
     result_pool.close()
     print("Result threads pool shut down successfully")
 
-def spawn_results_processes(crypto, savefile, num_threads=client_settings["results_threads"]):
-    global result_socket
+def monitor_batches():
+    global done_with_bwa, done_with_exact
+
+    monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    monitor_socket.bind(('', client_settings["control_port"]))
+    monitor_socket.listen()
+
+    while (not done_with_bwa) and (not done_with_exact):
+        conn, addr = monitor_socket.accept()
+        signal = conn.recv(1)
+        
+        if signal == b'A':
+            done_with_bwa = True
+        if signal == b'B':
+            done_with_exact = True
+
+def spawn_results_processes(crypto, savefile):
+    global result_socket, done_with_bwa, done_with_exact
     result_socket.listen()
 
     thread_counter = 0
 
     processes = []
 
-    while thread_counter < num_threads:
+    while (not done_with_bwa) and (not done_with_exact):
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
 
@@ -434,14 +452,14 @@ def main():
         print("PMT")
         print(pmt)
 
+    control_thread = threading.Thread(target=monitor_batches)
+    control_thread.start()
+
     print("Client initialized")
     if len(sys.argv) > 1:
         readfile = sys.argv[1] 
-        num_threads = client_settings["results_threads"]
-        if len(sys.argv) > 2:
-            num_threads = int(sys.argv[2])
-
-        send_read_wrapper(readfile, num_threads)
+        send_read_wrapper(readfile)
+    
     else:
         command_str = ""
         while True:

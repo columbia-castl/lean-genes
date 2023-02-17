@@ -143,6 +143,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
             if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
                 if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
+                    print("Trigger normal exact match batch")
                     batch_queue = queue.Queue()
                     for i in range(leangenes_params["LG_BATCH_SIZE"]):
                         batch_queue.put(matched_reads.get())
@@ -151,6 +152,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
             if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
                 if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
+                    print("Trigger normal BWA batch") 
                     batch_queue = queue.Queue()
                     for i in range(leangenes_params["BWA_BATCH_SIZE"]):
                         batch_queue.put(unmatched_reads.get())
@@ -175,7 +177,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             pid = os.fork()
             if not pid:
                 print("Process is serializing final batch")
-                serialize_exact_batch(matched_reads)
+                serialize_exact_batch(matched_reads, last=True)
                 exit()
 
         #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
@@ -187,7 +189,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             pid = os.fork()
             if not pid:
                 print("Process sending final batch to enclave")
-                send_unmatches_to_enclave(unmatched_reads)
+                send_unmatches_to_enclave(unmatched_reads, last=True)
                 exit()
 
         unmatched_read_counter = 0
@@ -196,7 +198,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
-def send_unmatches_to_enclave(unmatches):
+def send_unmatches_to_enclave(unmatches, last=False):
 
     print("<unmatch_sender>: --> sending non-matches to the enclave")
 
@@ -211,7 +213,13 @@ def send_unmatches_to_enclave(unmatches):
 
     unmatched_socket.close()
 
-def serialize_exact_batch(match_queue):
+    if last:
+        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
+        monitor_socket.send(b'A')
+        monitor_socket.close()
+
+def serialize_exact_batch(match_queue, last=False):
     serialized_queue = queue.Queue() 
     read_parser = Read() 
 
@@ -232,6 +240,12 @@ def serialize_exact_batch(match_queue):
 
     matched_socket.close()
     return True
+
+    if last:
+        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
+        monitor_socket.send(b'B')
+        monitor_socket.close()
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result = Result()
