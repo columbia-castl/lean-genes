@@ -2,6 +2,11 @@ syntax = "proto2";
 
 package lean_genes;
 
+message BatchID {
+	required int32 num = 1;
+	required int32 type = 2;
+}
+
 message Read {
 	required bytes read = 1;
 	required string align_score = 2;

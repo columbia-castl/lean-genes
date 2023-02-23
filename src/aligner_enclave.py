@@ -17,7 +17,7 @@ from subprocess import Popen, PIPE, STDOUT
 from Crypto.Random import get_random_bytes 
 from Crypto.Random import random
 from Crypto.Cipher import AES
-from reads_pb2 import Read, Result, PMT_Entry 
+from reads_pb2 import Read, Result, PMT_Entry, BatchID 
 from vsock_handlers import VsockListener
 from google.protobuf.internal.encoder import _VarintBytes
 from enum import Enum
@@ -32,7 +32,6 @@ limit_hashes = False
 hash_limit = 100
 limit_lines = False
 line_limit = 100
-mode = "DEBUG"
 
 #After x hashes print progress
 progress_indicator = enclave_settings["hashing_progress_indicator"]
@@ -41,20 +40,6 @@ pmt = []
 class SamState(Enum):
     PROCESSING_HEADER = 1
     PROCESSING_READS = 2
-
-class SamReadFields(Enum):
-    qname = 1
-    flag = 2
-    rname = 3
-    pos = 4
-    mapq = 5
-    cigar = 6
-    rnext = 7
-    pnext = 8
-    tlen = 9
-    seq = 10
-    qual = 11
-    additional = 12
 
 def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
@@ -123,7 +108,6 @@ def sam_sender(sam_data):
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
     PARSING_STATE = SamState.PROCESSING_HEADER
-    READ_STATE = SamReadFields.qname
 
     crypto_key = b'0' * 32
     crypto = AES.new(crypto_key, AES.MODE_ECB)
@@ -434,7 +418,7 @@ def main():
             sleep(10)
 
     #Crypto key for hashes
-    if mode == "DEBUG":
+    if leangenes_params["CRYPTO_MODE"] == "debug":
         key = b'0' * 32
     else:
         key = get_random_bytes(32)    

@@ -19,8 +19,6 @@ from google.protobuf.internal.decoder import _DecodeVarint32
 from multiprocessing import pool 
 
 debug = client_settings["debug"]
-mode = "DEBUG"
-AES_BLOCK_SIZE = 16
 result_socket = ""
 pmt = []
 
@@ -115,7 +113,7 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
                     print(curr_hash)
 
                 #padding
-                while len(get_line_bytes) % AES_BLOCK_SIZE != 0:
+                while len(get_line_bytes) % leangenes_params["AES_BLOCK_SIZE"] != 0:
                     get_line_bytes += b'0'
                 newread.read = encrypter.encrypt(get_line_bytes)
                 newread.hash = curr_hash
@@ -190,7 +188,7 @@ def receive_pmt_wrapper():
     receive_pmt(pmt_socket)
 
 def send_read_wrapper(filename): 
-    if mode == "DEBUG":
+    if leangenes_params["CRYPTO_MODE"] == "debug":
         hashkey = b'0' * 32
         cipherkey = b'0' * 32
     else:

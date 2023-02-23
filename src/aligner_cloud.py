@@ -6,7 +6,7 @@ import threading
 import queue
 
 from aligner_config import global_settings, pubcloud_settings, genome_params, leangenes_params
-from reads_pb2 import Read, PMT_Entry, Result
+from reads_pb2 import Read, PMT_Entry, Result, BatchID
 from multiprocessing import pool
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -15,7 +15,6 @@ from google.protobuf.internal.decoder import _DecodeVarint32
 from vsock_handlers import VsockStream
 
 debug = pubcloud_settings["debug"]
-mode = "DEBUG"
 do_pmt_proxy = False
 
 def client_handler(args): 
@@ -344,7 +343,7 @@ def main():
     redis_port = global_settings["redis_port"]
     bwa_port = pubcloud_settings["bwa_port"]
 
-    if mode == "DEBUG":
+    if leangenes_params["CRYPTO_MODE"] == "debug":
         cipherkey = b'0' * 32
     else:
         cipherkey = get_random_bytes(32)
