@@ -20,6 +20,7 @@ from Crypto.Cipher import AES
 from reads_pb2 import Read, Result, PMT_Entry, BatchID 
 from vsock_handlers import VsockListener
 from google.protobuf.internal.encoder import _VarintBytes
+from google.protobuf.internal.decoder import _DecodeVarint32
 from enum import Enum
 
 #Global params to help with debug and test
@@ -92,7 +93,7 @@ def process_read(protobuffer, read_bytes, crypto):
         print("Read size: " + str(protobuffer.ByteSize()))
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
-def sam_sender(sam_data):
+def sam_sender(sam_data, batch_id):
 
     if sam_data == b'':
         return ''
@@ -106,6 +107,9 @@ def sam_sender(sam_data):
 
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
+
+    bwa_socket.send(_VarintBytes(batch_id.ByteSize()))
+    bwa_socket.send(batch_id.SerializeToString())
 
     PARSING_STATE = SamState.PROCESSING_HEADER
 
@@ -322,6 +326,15 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
 
         print("CONNECTION TO PUBCLOUD ESTABLISHED")
 
+        size_bytes = conn.recv(1)
+        size, ids = _DecodeVarint32(size_bytes, 0)
+        ids = conn.recv(size)
+
+        batch_id = BatchID()
+        check_id = batch_id.ParseFromString(ids)
+        print("Batch #", batch_id.num)
+        print("Batch ID Type: ", batch_id.type)
+
         while True: 
             data = conn.recv(serialized_read_size) 
             
@@ -354,13 +367,13 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         #FLUSH READS
         if debug:
             print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
-        result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter,)) 
+        result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter, batch_id,)) 
         result_thread.start() 
         unmatched_fastq = ""
 
         conn.close()    
 
-def send_back_results(fasta_path, fastq_bytes, num_reads):
+def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     #WHERE BWA IS CALLED
     print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
     if debug: 
@@ -369,7 +382,7 @@ def send_back_results(fasta_path, fastq_bytes, num_reads):
     if debug: 
         print(returned_sam)
         print("BWA RETURNS ^^")
-    sam_sender(returned_sam) 
+    sam_sender(returned_sam, batch_id) 
     
 
 def main():

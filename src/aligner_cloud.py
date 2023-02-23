@@ -64,6 +64,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     return proxy_socket
 
 def receive_reads(serialized_read_size, crypto, redis_table):
+    
     print("CLIENT THREAD STARTED")
 
     unmatched_reads = queue.Queue()
@@ -76,6 +77,8 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     read_counter = 0
     exact_read_counter = 0
     unmatched_read_counter = 0
+
+    batch_counter = 0
 
     while True:
         client_socket.listen()
@@ -152,11 +155,17 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
                 if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
                     print("Trigger normal BWA batch") 
+                    
+                    batch_id = BatchID()
+                    batch_id.num = batch_counter
+                    batch_id.type = 0
+
                     batch_queue = queue.Queue()
                     for i in range(leangenes_params["BWA_BATCH_SIZE"]):
                         batch_queue.put(unmatched_reads.get())
-                    unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(batch_queue,))
+                    unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(batch_queue, batch_id,))
                     unmatch_sender_thread.start()
+                    batch_counter += 1
 
             if debug:
                 print("Data: ")
@@ -167,6 +176,25 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if not data:
                 break
 
+        conn.close()
+
+        #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
+        if not unmatched_reads.empty():
+            
+            #unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(unmatched_reads,))
+            #unmatch_sender_thread.start()
+
+            pid = os.fork()
+            if not pid:
+                batch_id = BatchID()
+                batch_id.num = batch_counter
+                batch_id.type = 1
+
+                print("Process sending final batch to enclave")
+                send_unmatches_to_enclave(unmatched_reads, batch_id)
+                exit()
+
+ 
         #FLUSH EXTRA EXACT MATCHES
         if not matched_reads.empty():
             
@@ -179,25 +207,13 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 serialize_exact_batch(matched_reads, last=True)
                 exit()
 
-        #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
-        if not unmatched_reads.empty():
-            
-            #unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(unmatched_reads,))
-            #unmatch_sender_thread.start()
-
-            pid = os.fork()
-            if not pid:
-                print("Process sending final batch to enclave")
-                send_unmatches_to_enclave(unmatched_reads, last=True)
-                exit()
-
         unmatched_read_counter = 0
         exact_read_counter = 0
     
     #unmatched_socket.send(unmatched_reads)
     unmatched_reads.clear()
 
-def send_unmatches_to_enclave(unmatches, last=False):
+def send_unmatches_to_enclave(unmatches, batch_id):
 
     print("<unmatch_sender>: --> sending non-matches to the enclave")
 
@@ -206,17 +222,14 @@ def send_unmatches_to_enclave(unmatches, last=False):
     
     if debug:
         print("Len of unmatched reads: ", unmatches.qsize())
-    
+
+    unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
+    unmatched_socket.send(batch_id.SerializeToString())
+
     while not unmatches.empty(): 
         unmatched_socket.send(unmatches.get())
 
     unmatched_socket.close()
-
-    if last:
-        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
-        monitor_socket.send(b'A')
-        monitor_socket.close()
 
 def serialize_exact_batch(match_queue, last=False):
     serialized_queue = queue.Queue() 
@@ -238,13 +251,14 @@ def serialize_exact_batch(match_queue, last=False):
         matched_socket.send(match_buf[1])
 
     matched_socket.close()
-    return True
 
     if last:
         monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
         monitor_socket.send(b'B')
         monitor_socket.close()
+
+    return True
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result = Result()
@@ -266,6 +280,9 @@ def get_bwa_results(bwa_socket):
 
     print("ENCLAVE SIDE THREAD STARTS")
 
+    batch_counter = 0
+    last_batch = False
+
     while True:
         bwa_socket.listen()
         conn, addr = bwa_socket.accept()
@@ -276,6 +293,17 @@ def get_bwa_results(bwa_socket):
         pid = os.fork()
 
         if not pid:
+            batch_bytes = conn.recv(1)
+            size, ids = _DecodeVarint32(batch_bytes, 0)
+            ids = conn.recv(size)
+
+            batch_id = BatchID()
+            check_id = batch_id.ParseFromString(ids)
+
+            #if debug:
+            print("Batch #", batch_id.num)
+            print("Batch ID Type: ", batch_id.type)
+
             print("--> spawn BWA result process")
             data = b''
             num_appended = 0
@@ -301,18 +329,21 @@ def get_bwa_results(bwa_socket):
                     print("size_len", size_len)
                     print("msg_len", msg_len) 
                 data = data[msg_len + size_len:]
-
+            
             conn.close()
-            send_bwa_results(serialized_unmatches)
+            
+            last_batch = batch_id.type
+            send_bwa_results(serialized_unmatches, last_batch)
+        
 
-def send_bwa_results(result_queue):
+def send_bwa_results(result_queue, last=False):
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if debug:
         print("-->BWA result thread initiated")
 
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
-    
+
     if debug:
         print("--> Sending BWA result data!") 
  
@@ -328,6 +359,12 @@ def send_bwa_results(result_queue):
             print("---> Unmatched result back to client.")
 
     result_socket.close()
+
+    if last:
+        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
+        monitor_socket.send(b'A')
+        monitor_socket.close()
 
     return True
 
@@ -383,6 +420,7 @@ def main():
             bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             bwa_socket.bind(('', pubcloud_settings["bwa_port"]))
             get_bwa_results(bwa_socket)
+            bwa_socket.close()
 
         #from_enclave_thread = threading.Thread(target=get_bwa_results, args= (bwa_socket,))
         #from_enclave_thread.start()

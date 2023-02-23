@@ -407,8 +407,12 @@ def monitor_batches():
         
         if signal == b'A':
             done_with_bwa = True
+            print("The aligner is done with BWA-aligned reads")
         if signal == b'B':
             done_with_exact = True
+            print("The aligner is done with exact-matched reads")
+
+    monitor_socket.close()
 
 def spawn_results_processes(crypto, savefile):
     global result_socket, done_with_bwa, done_with_exact

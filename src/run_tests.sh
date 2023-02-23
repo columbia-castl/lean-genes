@@ -6,7 +6,7 @@ do
 	time python3 aligner_client.py ../test_data/sample-reads/matches_0.$PERCENT.fastq > client_log_$PERCENT
 	cat ../test_data/sample-reads/matches_0.$PERCENT.fastq.sam_* > ../test_data/sample-reads/matches_0.$PERCENT.fastq.sam
 	python3 analysis/sam_stats.py ../test_data/sample-reads/matches_0.$PERCENT.fastq.sam > align_stats_$PERCENT	
-	sleep 30
+	sleep 120
 done
 
 mkdir run
