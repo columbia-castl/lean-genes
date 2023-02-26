@@ -304,8 +304,6 @@ def process_results_thread(crypto, savefile, thread_id):
 
 
 def process_results(crypto, savefile, thread_id, conn): 
-    global result_socket
-
     print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
 
     num_reads_processed = 0
@@ -401,7 +399,7 @@ def monitor_batches():
     monitor_socket.bind(('', client_settings["control_port"]))
     monitor_socket.listen()
 
-    while (not done_with_bwa) and (not done_with_exact):
+    while (not done_with_bwa) or (not done_with_exact):
         conn, addr = monitor_socket.accept()
         signal = conn.recv(1)
         
@@ -422,7 +420,7 @@ def spawn_results_processes(crypto, savefile):
 
     processes = []
 
-    while (not done_with_bwa) and (not done_with_exact):
+    while (not done_with_bwa) or (not done_with_exact):
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
 
@@ -430,6 +428,7 @@ def spawn_results_processes(crypto, savefile):
 
         if not pid:
             process_results(crypto, savefile, thread_counter, conn)
+
             return
         else:
             thread_counter += 1
@@ -442,6 +441,8 @@ def spawn_results_processes(crypto, savefile):
             time.sleep(1)
         else:
             processes.remove(pid)
+
+    result_socket.close()
 
 def main():
     global result_socket, pmt
@@ -483,8 +484,6 @@ def main():
                 print("CLIENT ERROR. PLEASE RESTART.")
 
     return
-    #print("Exiting client.")
-    #result_socket.close()
 
 if __name__ == "__main__":
     main()

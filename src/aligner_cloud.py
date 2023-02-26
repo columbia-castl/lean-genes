@@ -332,7 +332,8 @@ def get_bwa_results(bwa_socket):
             
             conn.close()
             
-            last_batch = batch_id.type
+            if batch_id.type == 1:
+                last_batch = True
             send_bwa_results(serialized_unmatches, last_batch)
         
 
@@ -341,6 +342,12 @@ def send_bwa_results(result_queue, last=False):
 
     if debug:
         print("-->BWA result thread initiated")
+
+    if last:
+        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
+        monitor_socket.send(b'A')
+        monitor_socket.close()
 
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
 
@@ -359,13 +366,6 @@ def send_bwa_results(result_queue, last=False):
             print("---> Unmatched result back to client.")
 
     result_socket.close()
-
-    if last:
-        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
-        monitor_socket.send(b'A')
-        monitor_socket.close()
-
     return True
 
 def main():
