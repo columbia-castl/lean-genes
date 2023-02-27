@@ -41,13 +41,18 @@ pmt = []
 class SamState(Enum):
     PROCESSING_HEADER = 1
     PROCESSING_READS = 2
+    EMPTY_SAM = 3
 
 def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "bwa index " + fasta + " &")
 
 def dispatch_bwa(bwa_path, fasta, fastq):
-    print("Passing batched FASTQ to BWA...")
+    
+    if debug:
+        print("Passing batched FASTQ to BWA...")
+        print(len(fastq), " is len of fastq")
+
     if debug_subprocess: 
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
@@ -95,9 +100,6 @@ def process_read(protobuffer, read_bytes, crypto):
 
 def sam_sender(sam_data, batch_id):
 
-    if sam_data == b'':
-        return ''
-
     if debug: 
         print("\tSAM SENDER RECEIVES: ", sam_data)
 
@@ -117,8 +119,12 @@ def sam_sender(sam_data, batch_id):
     crypto = AES.new(crypto_key, AES.MODE_ECB)
 
     result_counter = 0
+   
     for line in sam_lines:
         if PARSING_STATE == SamState.PROCESSING_HEADER:
+            if line == b'':
+                PARSING_STATE = SamState.EMPTY_SAM
+                break
             if line[0] == 64: #ASCII for @
                 new_result.sam_header += (line + b'\n')
             else:
@@ -152,6 +158,8 @@ def sam_sender(sam_data, batch_id):
         else:
             printf("ERROR: Unexpected SAM parsing state")
 
+    if debug:
+        print(result_counter, " results were sent from this batch.")
     bwa_socket.close()
 
 def server_handler(port):
@@ -378,7 +386,9 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
     if debug: 
         print("FASTQ: ", fastq_bytes)
+    
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
+    
     if debug: 
         print(returned_sam)
         print("BWA RETURNS ^^")

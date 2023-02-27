@@ -1,37 +1,34 @@
 
 global_settings = dict(
     redis_port = 6379,
-    redis_ip = '3.95.138.144',
+    redis_ip = '35.175.245.178',
 )
 
 #IP addresses refer to the machines that each component is connecting to, and not itself
 #Currently, the pubcloud's IP is misleadingly named "server_ip"
 client_settings = dict(
-    server_ip = '3.95.138.144',
+    server_ip = '35.175.245.178',
     pmt_port = 4445,
     read_port = 4444,
     result_port = 4446,
-    control_port = 4447,
     debug = False,
     #results_threads = 11
 )
 
 pubcloud_settings = dict(
-    enclave_ip = '3.95.138.144',
-    client_ip = '3.95.138.144',
+    enclave_ip = '35.175.245.178',
+    client_ip = '35.175.245.178',
     read_port = 4444,
     pmt_client_port = 4445,
     result_port = 4446,
-    control_port = 4447,
     unmatched_port = 5006,
     bwa_port = 5007,
     only_indexing = False,
-    disable_exact_matching = False,
     debug = False
 )
 
 enclave_settings = dict(
-    server_ip = '3.95.138.144',
+    server_ip = '35.175.245.178',
     vsock_port = 5006,
     #If this path isn't empty (i.e. BWA is on PATH), make sure it ends with /"
     bwa_path = "../bwa/",
@@ -53,7 +50,8 @@ leangenes_params = dict(
     LG_BATCH_SIZE = 1000, #Serialized exact match batches 
     READ_BATCH_SIZE = 1000, #How many reads client sends at once
     AES_BLOCK_SIZE = 16,
-    CRYPTO_MODE = "debug"
+    CRYPTO_MODE = "debug",
+    disable_exact_matching = False,
 )
 
 #CHR21 parameters 

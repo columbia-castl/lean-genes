@@ -14,7 +14,7 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 from enum import Enum
-from reads_pb2 import Read, PMT_Entry, Result
+from reads_pb2 import Read, PMT_Entry, Result, BatchID
 from google.protobuf.internal.decoder import _DecodeVarint32
 from multiprocessing import pool 
 
@@ -37,8 +37,9 @@ read_socket = ""
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
 done_sending = False
-done_with_exact = False
+done_with_exact = leangenes_params["disable_exact_matching"]
 done_with_bwa = False
+
 reads_sent = 0
 
 def receive_pmt(pmt_socket):
@@ -392,50 +393,60 @@ def track_reads_received(crypto, savefile):
     result_pool.close()
     print("Result threads pool shut down successfully")
 
-def monitor_batches():
-    global done_with_bwa, done_with_exact
-
-    monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    monitor_socket.bind(('', client_settings["control_port"]))
-    monitor_socket.listen()
-
-    while (not done_with_bwa) or (not done_with_exact):
-        conn, addr = monitor_socket.accept()
-        signal = conn.recv(1)
-        
-        if signal == b'A':
-            done_with_bwa = True
-            print("The aligner is done with BWA-aligned reads")
-        if signal == b'B':
-            done_with_exact = True
-            print("The aligner is done with exact-matched reads")
-
-    monitor_socket.close()
-
 def spawn_results_processes(crypto, savefile):
     global result_socket, done_with_bwa, done_with_exact
     result_socket.listen()
 
     thread_counter = 0
+    last_bwa_batch = 0
+    last_lg_batch = 0
 
     processes = []
 
-    while (not done_with_bwa) or (not done_with_exact):
+    while True:
+      
+        if leangenes_params["disable_exact_matching"]:
+            if last_bwa_batch and (thread_counter > last_bwa_batch):
+                break
+        else:
+            if last_bwa_batch and last_lg_batch:
+                if thread_counter > max(last_bwa_batch, last_lg_batch):
+                    break
+
+        print("<results>: Wait to accept another process")
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
+        
+        
+        size_bytes = conn.recv(1)
+        size, ids = _DecodeVarint32(size_bytes, 0)
+        ids = conn.recv(size)
+
+        batch_id = BatchID()
+        check_id = batch_id.ParseFromString(ids)
+
+        if batch_id.type == 1:
+            print("<results>: Last BWA batch num indicated")
+            last_bwa_batch = batch_id.num
+        elif batch_id.type == 2: 
+            print("<results>: Last LG batch num indicated")
+            last_lg_batch = batch_id.num 
 
         pid = os.fork()
-
+        
         if not pid:
             process_results(crypto, savefile, thread_counter, conn)
-
             return
         else:
             thread_counter += 1
             processes.append(pid)
+            print(len(processes), " processes")
+
+    print("<results>: Client done accepting results!")
 
     #code-maven.com/python-fork-and-wait
     while processes:
+        print("Waiting for ", len(processes), " processes")
         pid, exit_code = os.wait()
         if pid == 0:
             time.sleep(1)
@@ -454,9 +465,6 @@ def main():
     if debug:
         print("PMT")
         print(pmt)
-
-    control_thread = threading.Thread(target=monitor_batches)
-    control_thread.start()
 
     print("Client initialized")
     if len(sys.argv) > 1:

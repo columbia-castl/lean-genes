@@ -112,44 +112,43 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             if debug:
                 decrypted_data = crypto.decrypt(read_parser.read)
 
-            if pubcloud_settings["disable_exact_matching"]:
+            if leangenes_params["disable_exact_matching"]:
                 unmatched_read_counter += 1
                 unmatched_reads.put(data)
                 if debug: 
                     print("Storing data for enclave [no matching check performed].")
             else:
-                #Sanity check, avoid looking in db for connection-ending/malformed msgs
-                if len(read_parser.hash) > 0:
-                    read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
-                    if read_found != None:
-                        if debug: 
-                            print("Exact match read found.")
-                            print("exact: " + str(exact_read_counter))
-                        
-                        exact_read_counter += 1
-                        matched_reads.put((data, read_found))
+                read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+                if read_found != None:
+                    if debug: 
+                        print("Exact match read found.")
+                        print("exact: " + str(exact_read_counter))
+                    
+                    exact_read_counter += 1
+                    matched_reads.put((data, read_found))
 
-                        if debug: 
-                            print("Match at: " + str(read_found, 'utf-8'))
-                        
-                        #assemble SAM entry
-                        #serialized_match = serialize_exact_match(read_parser.read, read_parser.align_score, read_found)
-                        #serialized_matches.append(serialized_match)
-
-                    else:
-                        if debug: 
-                            print("Read was not exact match.")
-                            print("unmatched: " + str(unmatched_read_counter))
-                        unmatched_read_counter += 1
-                        unmatched_reads.put(data)                
+                    if debug: 
+                        print("Match at: " + str(read_found, 'utf-8'))
+                    
+                else:
+                    if debug: 
+                        print("Read was not exact match.")
+                        print("unmatched: " + str(unmatched_read_counter))
+                    unmatched_read_counter += 1
+                    unmatched_reads.put(data)                
 
             if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
                 if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
                     print("Trigger normal exact match batch")
+
+                    batch_id = BatchID()
+                    batch_id.num = batch_counter
+                    batch_id.type = 0
+
                     batch_queue = queue.Queue()
                     for i in range(leangenes_params["LG_BATCH_SIZE"]):
                         batch_queue.put(matched_reads.get())
-                    match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue,))
+                    match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue, batch_id,))
                     match_serializer_thread.start()
 
             if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
@@ -179,34 +178,28 @@ def receive_reads(serialized_read_size, crypto, redis_table):
         conn.close()
 
         #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
-        if not unmatched_reads.empty():
-            
-            #unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(unmatched_reads,))
-            #unmatch_sender_thread.start()
+        pid = os.fork()
+        if not pid:
+            batch_id = BatchID()
+            batch_id.num = batch_counter
+            batch_id.type = 1
 
-            pid = os.fork()
-            if not pid:
-                batch_id = BatchID()
-                batch_id.num = batch_counter
-                batch_id.type = 1
-
-                print("Process sending final batch to enclave")
-                send_unmatches_to_enclave(unmatched_reads, batch_id)
-                exit()
-
+            print("Process sending final batch to enclave")
+            send_unmatches_to_enclave(unmatched_reads, batch_id)
+            exit()
  
-        #FLUSH EXTRA EXACT MATCHES
-        if not matched_reads.empty():
-            
-            #match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(matched_reads,))
-            #match_serializer_thread.start()
-            
+        #FLUSH EXTRA EXACT MATCHES WHEN ENABLED
+        if not leangenes_params["disable_exact_matching"]:    
             pid = os.fork()
             if not pid:
                 print("Process is serializing final batch")
-                serialize_exact_batch(matched_reads, last=True)
+                batch_id = BatchID()
+                batch_id.num = batch_counter + 1
+                batch_id.type = 2
+                serialize_exact_batch(matched_reads, batch_id)
                 exit()
-
+        
+        batch_counter = 0
         unmatched_read_counter = 0
         exact_read_counter = 0
     
@@ -231,7 +224,7 @@ def send_unmatches_to_enclave(unmatches, batch_id):
 
     unmatched_socket.close()
 
-def serialize_exact_batch(match_queue, last=False):
+def serialize_exact_batch(match_queue, batch_id):
     serialized_queue = queue.Queue() 
     read_parser = Read() 
 
@@ -245,19 +238,15 @@ def serialize_exact_batch(match_queue, last=False):
     matched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     matched_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
 
+    matched_socket.send(_VarintBytes(batch_id.ByteSize()))
+    matched_socket.send(batch_id.SerializeToString())
+
     while not serialized_queue.empty():
         match_buf = serialized_queue.get()
         matched_socket.send(match_buf[0])
         matched_socket.send(match_buf[1])
 
     matched_socket.close()
-
-    if last:
-        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
-        monitor_socket.send(b'B')
-        monitor_socket.close()
-
     return True
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
@@ -331,25 +320,18 @@ def get_bwa_results(bwa_socket):
                 data = data[msg_len + size_len:]
             
             conn.close()
-            
-            if batch_id.type == 1:
-                last_batch = True
-            send_bwa_results(serialized_unmatches, last_batch)
-        
+            send_bwa_results(serialized_unmatches, batch_id)
 
-def send_bwa_results(result_queue, last=False):
+def send_bwa_results(result_queue, batch_id):
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     if debug:
         print("-->BWA result thread initiated")
 
-    if last:
-        monitor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        monitor_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["control_port"]))
-        monitor_socket.send(b'A')
-        monitor_socket.close()
-
     result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
+
+    result_socket.send(_VarintBytes(batch_id.ByteSize()))
+    result_socket.send(batch_id.SerializeToString())
 
     if debug:
         print("--> Sending BWA result data!") 
@@ -396,7 +378,7 @@ def main():
 
     redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
 
-    if pubcloud_settings["disable_exact_matching"]:
+    if leangenes_params["disable_exact_matching"]:
         print("**************************************************************")
         print("You have disabled the LEAN-GENES exact matching functionality!")
         print("**************************************************************")
