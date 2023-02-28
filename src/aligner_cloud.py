@@ -187,7 +187,10 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             print("Process sending final batch to enclave")
             send_unmatches_to_enclave(unmatched_reads, batch_id)
             exit()
- 
+        else:
+            while not unmatched_reads.empty():
+                unmatched_reads.get()
+
         #FLUSH EXTRA EXACT MATCHES WHEN ENABLED
         if not leangenes_params["disable_exact_matching"]:    
             pid = os.fork()
@@ -198,6 +201,9 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 batch_id.type = 2
                 serialize_exact_batch(matched_reads, batch_id)
                 exit()
+            else:
+                while not matched_reads.empty():
+                    matched_reads.get()
         
         batch_counter = 0
         unmatched_read_counter = 0
