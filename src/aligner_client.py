@@ -400,16 +400,18 @@ def spawn_results_processes(crypto, savefile):
     thread_counter = 0
     last_bwa_batch = 0
     last_lg_batch = 0
+    bwa_set = False
+    lg_set = False
 
     processes = []
 
     while True:
       
         if leangenes_params["disable_exact_matching"]:
-            if last_bwa_batch and (thread_counter > last_bwa_batch):
+            if bwa_set and (thread_counter > last_bwa_batch):
                 break
         else:
-            if last_bwa_batch and last_lg_batch:
+            if bwa_set and lg_set:
                 if thread_counter > max(last_bwa_batch, last_lg_batch):
                     break
 
@@ -428,9 +430,11 @@ def spawn_results_processes(crypto, savefile):
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
             last_bwa_batch = batch_id.num
+            bwa_set = True 
         elif batch_id.type == 2: 
             print("<results>: Last LG batch num indicated")
             last_lg_batch = batch_id.num 
+            lg_set = True
 
         pid = os.fork()
         
