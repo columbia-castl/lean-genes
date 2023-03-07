@@ -148,8 +148,8 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
                 #print(qual_string)
 
                 serialized_read = newread.SerializeToString()
-                read_socket.send(serialized_read) 
-                #serialized_batch += serialized_read
+                #read_socket.send(serialized_read) 
+                serialized_batch += serialized_read
                 batch_counter += 1
 
                 if debug:
@@ -161,11 +161,10 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
                      
                     #read_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     #read_socket.connect((client_settings["server_ip"], client_settings["read_port"]))
-                    #read_socket.send(serialized_batch)
+                    read_socket.send(serialized_batch)
                     #read_socket.close()
                     
-                    #batch_counter = 0
-                    print(batch_counter)
+                    batch_counter = 0
                     serialized_batch = b""
                 
                 PARSING_STATE = FastqState.READ_LABEL

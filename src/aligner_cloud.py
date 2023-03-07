@@ -87,93 +87,105 @@ def receive_reads(serialized_read_size, crypto, redis_table):
         print("CLIENT CONNECTION ESTABLISHED!")
 
         while True:
-            data = conn.recv(serialized_read_size)
+            data = conn.recv(serialized_read_size * leangenes_params["READ_BATCH_SIZE"])
             
             if data == b'':
                 break
 
-            read_counter += 1
             
             if debug:
                 print("-->received data " + str(read_counter))
 
             data_attempts = 0
-            while len(data) < serialized_read_size:
-                data += conn.recv(serialized_read_size - len(data))
+            while len(data) < (serialized_read_size * leangenes_params["READ_BATCH_SIZE"]):
+                begin_len = len(data)
+                data += conn.recv((serialized_read_size * leangenes_params["READ_BATCH_SIZE"]) - len(data))
+                end_len = len(data)
+
+                if (end_len == begin_len) and (end_len % serialized_read_size == 0):
+                    break
+
                 if debug:
                     print("Data now len " + str(len(data)))
                 data_attempts += 1
                 if data_attempts > 10:
                     print("WARNING: Stuck in data receiving loop!")
 
-            check_read = read_parser.ParseFromString(data)
+            read_counter += (len(data) / serialized_read_size)
+            print("Read counter: ", read_counter)
 
-	        #Cloud can only see reads in debug mode
-            if debug:
-                decrypted_data = crypto.decrypt(read_parser.read)
+            while data:
+                next_read = data[0: serialized_read_size]
+                data = data[serialized_read_size:]
+                check_read = read_parser.ParseFromString(next_read)
 
-            if leangenes_params["disable_exact_matching"]:
-                unmatched_read_counter += 1
-                unmatched_reads.put(data)
-                if debug: 
-                    print("Storing data for enclave [no matching check performed].")
-            else:
-                read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
-                if read_found != None:
-                    if debug: 
-                        print("Exact match read found.")
-                        print("exact: " + str(exact_read_counter))
-                    
-                    exact_read_counter += 1
-                    matched_reads.put((data, read_found))
+                #Cloud can only see reads in debug mode
+                if debug:
+                    decrypted_data = crypto.decrypt(read_parser.read)
 
-                    if debug: 
-                        print("Match at: " + str(read_found, 'utf-8'))
-                    
-                else:
-                    if debug: 
-                        print("Read was not exact match.")
-                        print("unmatched: " + str(unmatched_read_counter))
+                if leangenes_params["disable_exact_matching"]:
                     unmatched_read_counter += 1
-                    unmatched_reads.put(data)                
+                    unmatched_reads.put(next_read)
+                    if debug: 
+                        print("Storing data for enclave [no matching check performed].")
+                else:
+                    read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+                    if read_found != None:
+                        if debug: 
+                            print("Exact match read found.")
+                            print("exact: " + str(exact_read_counter))
+                        
+                        exact_read_counter += 1
+                        matched_reads.put((next_read, read_found))
 
-            if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
-                if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
-                    print("Trigger normal exact match batch")
+                        if debug: 
+                            print("Match at: " + str(read_found, 'utf-8'))
+                        
+                    else:
+                        if debug: 
+                            print("Read was not exact match.")
+                            print("unmatched: " + str(unmatched_read_counter))
+                        unmatched_read_counter += 1
+                        unmatched_reads.put(next_read)                
 
-                    batch_id = BatchID()
-                    batch_id.num = batch_counter
-                    batch_id.type = 0
+                if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
+                    if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
+                        print("Trigger normal exact match batch")
 
-                    batch_queue = queue.Queue()
-                    for i in range(leangenes_params["LG_BATCH_SIZE"]):
-                        batch_queue.put(matched_reads.get())
-                    match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue, batch_id,))
-                    match_serializer_thread.start()
+                        batch_id = BatchID()
+                        batch_id.num = batch_counter
+                        batch_id.type = 0
 
-            if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
-                if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
-                    print("Trigger normal BWA batch") 
-                    
-                    batch_id = BatchID()
-                    batch_id.num = batch_counter
-                    batch_id.type = 0
+                        batch_queue = queue.Queue()
+                        for i in range(leangenes_params["LG_BATCH_SIZE"]):
+                            batch_queue.put(matched_reads.get())
+                        match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue, batch_id,))
+                        match_serializer_thread.start()
+                        batch_counter += 1
 
-                    batch_queue = queue.Queue()
-                    for i in range(leangenes_params["BWA_BATCH_SIZE"]):
-                        batch_queue.put(unmatched_reads.get())
-                    unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(batch_queue, batch_id,))
-                    unmatch_sender_thread.start()
-                    batch_counter += 1
+                if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
+                    if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
+                        print("Trigger normal BWA batch") 
+                        
+                        batch_id = BatchID()
+                        batch_id.num = batch_counter
+                        batch_id.type = 0
 
-            if debug:
-                print("Data: ")
-                print(decrypted_data)
-                print("Hash: ")
-                print(read_parser.hash)
-            
-            if not data:
-                break
+                        batch_queue = queue.Queue()
+                        for i in range(leangenes_params["BWA_BATCH_SIZE"]):
+                            batch_queue.put(unmatched_reads.get())
+                        unmatch_sender_thread = threading.Thread(target=send_unmatches_to_enclave, args=(batch_queue, batch_id,))
+                        unmatch_sender_thread.start()
+                        batch_counter += 1
+
+                if debug:
+                    print("Data: ")
+                    print(decrypted_data)
+                    print("Hash: ")
+                    print(read_parser.hash)
+                
+                if not data:
+                    break
 
         conn.close()
 
@@ -214,7 +226,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
 def send_unmatches_to_enclave(unmatches, batch_id):
 
-    print("<unmatch_sender>: --> sending non-matches to the enclave")
+    print("<unmatch_sender>: --> sending ", unmatches.qsize()  ," non-matches to the enclave")
 
     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
@@ -227,7 +239,7 @@ def send_unmatches_to_enclave(unmatches, batch_id):
 
     while not unmatches.empty(): 
         unmatched_socket.send(unmatches.get())
-
+        
     unmatched_socket.close()
 
 def serialize_exact_batch(match_queue, batch_id):
