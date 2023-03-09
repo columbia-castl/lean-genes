@@ -67,7 +67,6 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     
     print("CLIENT THREAD STARTED")
 
-
     unmatch_batch = b''
     #unmatched_reads = queue.Queue()
     matched_reads = queue.Queue()
@@ -113,7 +112,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     print("WARNING: Stuck in data receiving loop!")
 
             read_counter += (len(data) / serialized_read_size)
-            print("Read counter: ", read_counter)
+            print("Reads from client: ", read_counter)
                 
             if leangenes_params["disable_exact_matching"]:
                 
@@ -164,7 +163,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             print("Read was not exact match.")
                             print("unmatched: " + str(unmatched_read_counter))
                         unmatched_read_counter += 1
-                        unmatched_reads.put(next_read)                
+                        unmatch_batch += next_read            
 
                     if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
                         if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
@@ -181,27 +180,26 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             match_serializer_thread.start()
                             batch_counter += 1
 
-                    if unmatched_reads.qsize() >= leangenes_params["BWA_BATCH_SIZE"]: 
-                        if unmatched_read_counter % (leangenes_params["BWA_BATCH_SIZE"]) == 0: 
-                            print("Trigger normal BWA batch") 
-                            
-                            batch_id = BatchID()
-                            batch_id.num = batch_counter
-                            batch_id.type = 0
+                    if not (unmatched_read_counter % leangenes_params["BWA_BATCH_SIZE"]): 
+                        print("Trigger normal BWA batch") 
+                        
+                        batch_id = BatchID()
+                        batch_id.num = batch_counter
+                        batch_id.type = 0
 
-                            print("<unmatch_sender>: --> sending ", unmatches.qsize()  ," non-matches to the enclave")
+                        print("<unmatch_sender>: --> sending ", leangenes_params["BWA_BATCH_SIZE"]  ," non-matches to the enclave")
 
-                            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-                            
-                            unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
-                            unmatched_socket.send(batch_id.SerializeToString())
-                            unmatched_socket.send(unmatch_batch)
-                            
-                            unmatched_socket.close()
-                            
-                            unmatch_batch = b''
-                            batch_counter += 1
+                        unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+                        
+                        unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
+                        unmatched_socket.send(batch_id.SerializeToString())
+                        unmatched_socket.send(unmatch_batch)
+                        
+                        unmatched_socket.close()
+                        
+                        unmatch_batch = b''
+                        batch_counter += 1
 
                 if not data:
                     break
@@ -247,9 +245,6 @@ def receive_reads(serialized_read_size, crypto, redis_table):
         unmatched_read_counter = 0
         exact_read_counter = 0
     
-    #unmatched_socket.send(unmatched_reads)
-    unmatched_reads.clear()
-
 def send_unmatches_to_enclave(unmatches, batch_id):
 
     print("<unmatch_sender>: --> sending ", unmatches.qsize()  ," non-matches to the enclave")
@@ -362,8 +357,9 @@ def get_bwa_results(bwa_socket):
                     print("size_len", size_len)
                     print("msg_len", msg_len) 
                 data = data[msg_len + size_len:]
-            
+
             conn.close()
+            print(num_appended, " results from enclave")
             send_bwa_results(serialized_unmatches, batch_id)
 
 def send_bwa_results(result_queue, batch_id):

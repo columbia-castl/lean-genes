@@ -62,6 +62,7 @@ def dispatch_bwa(bwa_path, fasta, fastq):
     if debug:
         print(str(stdout_data, 'utf-8'))
         print(type(stdout_data))
+    print("SAM length: ", len(stdout_data))
     print(" ~~~ BWA HAS PROCESSED UNMATCHED READS! ~~~ ")
     return stdout_data
 
@@ -119,7 +120,8 @@ def sam_sender(sam_data, batch_id):
     crypto = AES.new(crypto_key, AES.MODE_ECB)
 
     result_counter = 0
-   
+    result_bytes = b''
+
     for line in sam_lines:
         if PARSING_STATE == SamState.PROCESSING_HEADER:
             if line == b'':
@@ -130,15 +132,19 @@ def sam_sender(sam_data, batch_id):
             else:
                 sep_read = line.split(b'\t')
                 result_tuple = process_read(new_result, sep_read, crypto)
-                bwa_socket.send(result_tuple[0])
-                bwa_socket.send(result_tuple[1])
+                
+                #bwa_socket.send(result_tuple[0])
+                #bwa_socket.send(result_tuple[1])
+                result_bytes += result_tuple[0]
+                result_bytes += result_tuple[1]
+
                 if debug:    
                     print("BWA SOCK sends result: ", result_tuple[1])
                     print("BWA SOCK sends size: ", result_tuple[0])
                 PARSING_STATE = SamState.PROCESSING_READS
 
                 if debug:
-                    print("----> Sending result " + str(result_counter) + " back to cloud")
+                    print("----> Processing result " + str(result_counter))
                     print(result_tuple)
                 result_counter += 1
 
@@ -147,17 +153,21 @@ def sam_sender(sam_data, batch_id):
             if (len(sep_read[0]) > 0):
                 new_result.sam_header = b''
                 result_tuple = process_read(new_result, sep_read, crypto)
-                bwa_socket.send(result_tuple[0])
-                bwa_socket.send(result_tuple[1])
+                
+                #bwa_socket.send(result_tuple[0])
+                #bwa_socket.send(result_tuple[1])
+                result_bytes += result_tuple[0]
+                result_bytes += result_tuple[1]
 
                 if debug:
-                    print("----> Sending result " + str(result_counter) + " back to cloud")
+                    print("----> Processing result " + str(result_counter))
                     print(result_tuple)
                 result_counter += 1
 
         else:
             printf("ERROR: Unexpected SAM parsing state")
 
+    bwa_socket.send(result_bytes)
     if debug:
         print(result_counter, " results were sent from this batch.")
     bwa_socket.close()
@@ -317,7 +327,7 @@ def transfer_pmt(pmt, chrom_id=0):
     print(str(count_entries) + " PMT entries processed")
     return pmt_socket
 
-def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta_path):
+def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
     unmatched_fastq = ""
     read_parser = Read()
 
@@ -344,7 +354,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
         print("Batch ID Type: ", batch_id.type)
 
         while True: 
-            data = conn.recv(serialized_read_size) 
+            data = conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]) 
             
             if debug:
                 print("-->received unmatched read from cloud")
@@ -352,29 +362,40 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fast
             if not data:
                 break
 
-            while len(data) < serialized_read_size:
-                data += conn.recv(serialized_read_size - len(data))
+            while len(data) < (serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]):
+                begin_len = len(data)
+                data += conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"] - len(data))
+                end_len = len(data)
+
+                if (end_len == begin_len) and (end_len % serialized_read_size == 0):
+                    break
+
                 if debug: 
                     print("Data now len " + str(len(data)))
 
-            check_read = read_parser.ParseFromString(data)
+            unmatched_counter += len(data) / serialized_read_size 
+            print("Reads from cloud: ", unmatched_counter)
 
-            unmatched_counter += 1
-            unmatched_fastq += (anonymized_label + "\n")
+            while data:
+                next_read = data[0: serialized_read_size]
+                data = data[serialized_read_size:]
+                check_read = read_parser.ParseFromString(next_read)
 
-            read_size = genome_params["READ_LENGTH"]
-            read_from_cloud = str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8')
-            unmatched_fastq += read_from_cloud + "\n"
-            if debug: 
-                print("From the cloud we get this read: ",read_from_cloud)
-                print("It has len: ", len(read_from_cloud))
+                read_size = genome_params["READ_LENGTH"]
+                read_from_cloud = str(crypto.decrypt(read_parser.read)[0:read_size], 'utf-8')
+                unmatched_fastq += (anonymized_label + "\n")
+                unmatched_fastq += read_from_cloud + "\n"
 
-            unmatched_fastq += "+\n"
-            unmatched_fastq += str(read_parser.align_score) + "\n"
+                if debug: 
+                    print("From the cloud we get this read: ",read_from_cloud)
+                    print("It has len: ", len(read_from_cloud))
+
+                unmatched_fastq += "+\n"
+                unmatched_fastq += str(read_parser.align_score) + "\n"
 
         #FLUSH READS
-        if debug:
-            print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
+        #if debug:
+        print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
         result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter, batch_id,)) 
         result_thread.start() 
         unmatched_fastq = ""
@@ -386,7 +407,8 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
     if debug: 
         print("FASTQ: ", fastq_bytes)
-    
+    print("FASTQ len: ", len(fastq_bytes))
+
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
     
     if debug: 
@@ -460,7 +482,7 @@ def main():
         #Run server for receiving encrypted reads
         unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         unmatched_socket.bind(('', unmatched_port)) 
-        get_encrypted_reads(unmatched_socket, serialized_read_size, batch_size, fasta)
+        get_encrypted_reads(unmatched_socket, serialized_read_size, fasta)
 
 if __name__ == "__main__":
     main()
