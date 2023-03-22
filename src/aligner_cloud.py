@@ -89,10 +89,10 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
         while True:
             data = conn.recv(serialized_read_size * leangenes_params["READ_BATCH_SIZE"])
-            
+           
             if data == b'':
                 break
-            
+
             if debug:
                 print("-->received data " + str(read_counter))
 
@@ -113,7 +113,8 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
             read_counter += (len(data) / serialized_read_size)
             print("Reads from client: ", read_counter)
-                
+            print("Data received: ", len(data), " bytes")            
+            
             if leangenes_params["disable_exact_matching"]:
                 
                 if debug: 
@@ -201,9 +202,6 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                         unmatch_batch = b''
                         batch_counter += 1
 
-                if not data:
-                    break
-
         conn.close()
 
         #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
@@ -221,7 +219,8 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                          
             unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
             unmatched_socket.send(batch_id.SerializeToString())
-            
+            unmatched_socket.send(unmatch_batch)
+
             unmatched_socket.close()
             exit()
         else:
@@ -308,59 +307,39 @@ def get_bwa_results(bwa_socket):
 
     print("ENCLAVE SIDE THREAD STARTS")
 
-    batch_counter = 0
-    last_batch = False
-
     while True:
+        result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
         bwa_socket.listen()
         conn, addr = bwa_socket.accept()
 
         if debug:
             print("-->BWA SOCKET CONNECTS SUCCESSFULLY")
        
+        print("--> spawn BWA result process")
+
         pid = os.fork()
 
         if not pid:
-            batch_bytes = conn.recv(1)
-            size, ids = _DecodeVarint32(batch_bytes, 0)
-            ids = conn.recv(size)
-
-            batch_id = BatchID()
-            check_id = batch_id.ParseFromString(ids)
-
-            #if debug:
-            print("Batch #", batch_id.num)
-            print("Batch ID Type: ", batch_id.type)
-
-            print("--> spawn BWA result process")
             data = b''
-            num_appended = 0
-
-            serialized_unmatches = queue.Queue()
-
+            
             while True:
-                data += conn.recv(10000)
+                begin_len = len(data)
+                data += conn.recv(1000000)
+                end_len = len(data)
 
-                if data == b'':
+                if not (end_len - begin_len):
                     break
 
-                msg_len, size_len = _DecodeVarint32(data, 0)
-                        
-                if (msg_len + size_len > len(data)):
-                    data += conn.recv(10000)
-                    continue
+            print(end_len, " bytes from enclave")
+            #print(data) 
 
-                serialized_unmatches.put((data[0:size_len], data[size_len: msg_len + size_len]))
-                num_appended += 1
-                if debug:
-                    print("\nAPPEND TO UNMATCHES",data[size_len: msg_len+size_len])
-                    print("size_len", size_len)
-                    print("msg_len", msg_len) 
-                data = data[msg_len + size_len:]
+            result_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
+            result_socket.send(data)
+            print("Data sent on result socket!")
+            result_socket.close()
 
             conn.close()
-            print(num_appended, " results from enclave")
-            send_bwa_results(serialized_unmatches, batch_id)
 
 def send_bwa_results(result_queue, batch_id):
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -62,7 +62,8 @@ def dispatch_bwa(bwa_path, fasta, fastq):
     if debug:
         print(str(stdout_data, 'utf-8'))
         print(type(stdout_data))
-    print("SAM length: ", len(stdout_data))
+        print("SAM length: ", len(stdout_data))
+    
     print(" ~~~ BWA HAS PROCESSED UNMATCHED READS! ~~~ ")
     return stdout_data
 
@@ -122,54 +123,62 @@ def sam_sender(sam_data, batch_id):
     result_counter = 0
     result_bytes = b''
 
-    for line in sam_lines:
-        if PARSING_STATE == SamState.PROCESSING_HEADER:
-            if line == b'':
-                PARSING_STATE = SamState.EMPTY_SAM
-                break
-            if line[0] == 64: #ASCII for @
-                new_result.sam_header += (line + b'\n')
-            else:
-                sep_read = line.split(b'\t')
-                result_tuple = process_read(new_result, sep_read, crypto)
-                
-                #bwa_socket.send(result_tuple[0])
-                #bwa_socket.send(result_tuple[1])
-                result_bytes += result_tuple[0]
-                result_bytes += result_tuple[1]
+    print(len(sam_lines), " in the SAM")
 
-                if debug:    
-                    print("BWA SOCK sends result: ", result_tuple[1])
-                    print("BWA SOCK sends size: ", result_tuple[0])
-                PARSING_STATE = SamState.PROCESSING_READS
-
-                if debug:
-                    print("----> Processing result " + str(result_counter))
-                    print(result_tuple)
-                result_counter += 1
-
-        elif PARSING_STATE == SamState.PROCESSING_READS:
-            sep_read = line.split(b'\t')
-            if (len(sep_read[0]) > 0):
-                new_result.sam_header = b''
-                result_tuple = process_read(new_result, sep_read, crypto)
-                
-                #bwa_socket.send(result_tuple[0])
-                #bwa_socket.send(result_tuple[1])
-                result_bytes += result_tuple[0]
-                result_bytes += result_tuple[1]
-
-                if debug:
-                    print("----> Processing result " + str(result_counter))
-                    print(result_tuple)
-                result_counter += 1
-
-        else:
-            printf("ERROR: Unexpected SAM parsing state")
-
-    bwa_socket.send(result_bytes)
-    if debug:
-        print(result_counter, " results were sent from this batch.")
+#    for line in sam_lines:
+#        if PARSING_STATE == SamState.PROCESSING_HEADER:
+#            if line == b'':
+#                PARSING_STATE = SamState.EMPTY_SAM
+#                break
+#            if line[0] == 64: #ASCII for @
+#                new_result.sam_header += (line + b'\n')
+#            else:
+#                sep_read = line.split(b'\t')
+#                result_tuple = process_read(new_result, sep_read, crypto)
+#                
+#                #bwa_socket.send(result_tuple[0])
+#                #bwa_socket.send(result_tuple[1])
+#                result_bytes += result_tuple[0]
+#                result_bytes += result_tuple[1]
+#
+#                if debug:    
+#                    print("BWA SOCK sends result: ", result_tuple[1])
+#                    print("BWA SOCK sends size: ", result_tuple[0])
+#                PARSING_STATE = SamState.PROCESSING_READS
+#
+#                if debug:
+#                    print("----> Processing result " + str(result_counter))
+#                    print(result_tuple)
+#                result_counter += 1
+#
+#        elif PARSING_STATE == SamState.PROCESSING_READS:
+#            sep_read = line.split(b'\t')
+#            if (len(sep_read[0]) > 0):
+#                new_result.sam_header = b''
+#                result_tuple = process_read(new_result, sep_read, crypto)
+#                
+#                #bwa_socket.send(result_tuple[0])
+#                #bwa_socket.send(result_tuple[1])
+#                result_bytes += result_tuple[0]
+#                result_bytes += result_tuple[1]
+#
+#                if debug:
+#                    print("----> Processing result " + str(result_counter))
+#                    print(result_tuple)
+#                result_counter += 1
+#
+#        else:
+#            printf("ERROR: Unexpected SAM parsing state")
+#        
+#        if result_counter % 250 == 0:
+#            print(result_counter)
+#
+#    print("Finished parsing SAM")
+#    bwa_socket.send(result_bytes)
+#    result_bytes = b''
+    #if debug:
+    print(result_counter, " results were sent from this batch.")
+    bwa_socket.send(sam_data)
     bwa_socket.close()
 
 def server_handler(port):
@@ -407,7 +416,7 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
     if debug: 
         print("FASTQ: ", fastq_bytes)
-    print("FASTQ len: ", len(fastq_bytes))
+        print("FASTQ len: ", len(fastq_bytes))
 
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
     
@@ -415,7 +424,7 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
         print(returned_sam)
         print("BWA RETURNS ^^")
     sam_sender(returned_sam, batch_id) 
-    
+     
 
 def main():
     global pmt

@@ -72,6 +72,9 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
     global PARSING_STATE, reads_sent, done_sending
 
     print("\n<read sender>: Processing reads from fastq: " + filename)
+    
+    begin_time = time.time()
+
     read_file = open(filename, "r")
     reads_sent = 0
 
@@ -175,11 +178,14 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
 
     if batch_counter:
         print("<read sender>: " + "-->Send final batch to cloud.")
-        #socket.send(serialized_batch)
+        read_socket.send(serialized_batch)
         serialized_batch = b""
 
     done_sending = True
-    print("<read sender>: " + str(reads_sent) + " reads processed in total.")
+
+    end_time = time.time()
+
+    print("<read sender>: " + str(reads_sent) + " reads processed in ", end_time - begin_time, " seconds")
     print("<read sender>: CLIENT HAS FINISHED SENDING READS\n")
 
 def receive_pmt_wrapper():
@@ -237,7 +243,7 @@ def unpack_read(next_result, crypto):
 
     return (sam, header)
 
-def process_results_thread(crypto, savefile, thread_id): 
+def receive_and_process_results_thread(crypto, savefile, thread_id): 
     global result_socket
 
     print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
@@ -252,7 +258,16 @@ def process_results_thread(crypto, savefile, thread_id):
     conn, addr = result_socket.accept()
     print("<results>: Processing thread " + str(thread_id)  + " receives connection!")
 
-    data = conn.recv(10000) 
+    data = b''
+
+    while True:
+        begin_len = len(data)
+        data = conn.recv(1000000) 
+        end_len = len(data)
+
+        if end_len == begin_len:
+            break
+
     while data:
         msg_len, size_len = _DecodeVarint32(data, 0)
 
@@ -260,11 +275,8 @@ def process_results_thread(crypto, savefile, thread_id):
             print("--------Size:")
             print(msg_len)
 
-        if (msg_len + size_len > len(data)):
-            data += conn.recv(10000)
-            continue
-
         result = data[size_len: size_len + msg_len]
+        
         if debug: 
             print("-------Result:")
             print(result)
@@ -273,6 +285,7 @@ def process_results_thread(crypto, savefile, thread_id):
         check_result = next_result.ParseFromString(result)
     
         add_to_sam, header = unpack_read(next_result, crypto)
+        
         if debug: 
             print("BYTES")
             print(add_to_sam) 
@@ -289,7 +302,6 @@ def process_results_thread(crypto, savefile, thread_id):
             first_thread_header = True
 
         data = data[size_len + msg_len:]
-        data += conn.recv(10000)
 
     conn.close()
 
@@ -303,14 +315,25 @@ def process_results_thread(crypto, savefile, thread_id):
     return num_reads_processed
 
 
-def process_results(crypto, savefile, thread_id, conn): 
+def receive_and_process_results(crypto, savefile, thread_id, conn): 
     print("<results>: Thread " + str(thread_id) + " -- " + "Result socket waiting...")
 
     num_reads_processed = 0
-    sam = b""
     first_thread_header = False
 
-    data = conn.recv(10000) 
+    sam = b""
+    data = b''
+     
+    while True:
+        begin_len = len(data)
+        data = conn.recv(1000000)
+        end_len = len(data)
+
+        if (end_len == begin_len) and (data != b''):
+            break
+        else:
+            print("The socket hasn't received any data...")
+
     while data:
         msg_len, size_len = _DecodeVarint32(data, 0)
 
@@ -318,11 +341,8 @@ def process_results(crypto, savefile, thread_id, conn):
             print("--------Size:")
             print(msg_len)
 
-        if (msg_len + size_len > len(data)):
-            data += conn.recv(10000)
-            continue
-
         result = data[size_len: size_len + msg_len]
+        
         if debug: 
             print("-------Result:")
             print(result)
@@ -347,7 +367,6 @@ def process_results(crypto, savefile, thread_id, conn):
             first_thread_header = True
 
         data = data[size_len + msg_len:]
-        data += conn.recv(10000)
 
     conn.close()
 
@@ -359,6 +378,62 @@ def process_results(crypto, savefile, thread_id, conn):
     file.close()
 
     return num_reads_processed
+
+def process_results(crypto, savefile, thread_id, result_data): 
+    print("<results>: Thread " + str(thread_id) + " processes results")
+
+    begin_time = time.time()
+    
+    num_reads_processed = 0
+    first_thread_header = False
+
+    sam = b""
+     
+    while result_data:
+        msg_len, size_len = _DecodeVarint32(result_data, 0)
+
+        if debug:
+            print("--------Size:")
+            print(msg_len)
+
+        result = result_data[size_len: size_len + msg_len]
+        
+        if debug: 
+            print("-------Result:")
+            print(result)
+        
+        next_result = Result()
+        check_result = next_result.ParseFromString(result)
+    
+        add_to_sam, header = unpack_read(next_result, crypto)
+        if debug: 
+            print("BYTES")
+            print(add_to_sam) 
+            print("STR")
+            print(str(add_to_sam, 'utf-8'))           
+
+        num_reads_processed += 1
+        if debug: 
+            print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed so far")
+
+        sam += add_to_sam
+        if (not first_thread_header) and (thread_id == 0):
+            sam = header + sam
+            first_thread_header = True
+
+        result_data = result_data[size_len + msg_len:]
+
+    end_time = time.time()
+
+    print("<results>: Thread " + str(thread_id) + " -- " + str(num_reads_processed) + " reads processed in ", (end_time - begin_time), " seconds.")
+    print("<results>: Thread " + str(thread_id) + " -- " + "SAVING SAM RESULTS IN " + savefile + "_" + str(thread_id)) 
+    
+    file = open(savefile + "_" + str(thread_id), 'wb')
+    file.write(sam)
+    file.close()
+
+    return num_reads_processed
+
 
 #This approach used w threads (as opposed to processes)
 def track_reads_received(crypto, savefile):
@@ -372,11 +447,11 @@ def track_reads_received(crypto, savefile):
     #NOTE:  This is more concise, but iterating through 'result_counts' will block if ANY thread isn't finished
     #       We would like to dynamically check threads then kill the pool when all results are received
     #thread_args = [(crypto, savefile, i) for i in range(client_settings["results_threads"])]
-    #result_counts = result_pool.starmap_async(process_results_thread, thread_args)
+    #result_counts = result_pool.starmap_async(receive_and_process_results_thread, thread_args)
 
     separable_results = [] 
     for i in range(client_settings["results_threads"]):
-        result_count = result_pool.apply_async(process_results_thread, args=(crypto, savefile, thread_counter))
+        result_count = result_pool.apply_async(receive_and_process_results_thread, args=(crypto, savefile, thread_counter))
         separable_results.append(result_count) 
         thread_counter += 1
     
@@ -407,7 +482,7 @@ def spawn_results_processes(crypto, savefile):
     while True:
       
         if leangenes_params["disable_exact_matching"]:
-            if bwa_set and (thread_counter > last_bwa_batch):
+            if bwa_set and (thread_counter >= last_bwa_batch):
                 break
         else:
             if bwa_set and lg_set:
@@ -418,13 +493,15 @@ def spawn_results_processes(crypto, savefile):
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
         
-        
         size_bytes = conn.recv(1)
         size, ids = _DecodeVarint32(size_bytes, 0)
         ids = conn.recv(size)
 
         batch_id = BatchID()
         check_id = batch_id.ParseFromString(ids)
+
+        print("Batch #", batch_id.num)
+        print("Batch ID Type: ", batch_id.type)
 
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
@@ -435,17 +512,34 @@ def spawn_results_processes(crypto, savefile):
             last_lg_batch = batch_id.num 
             lg_set = True
 
-        pid = os.fork()
-        
-        if not pid:
-            process_results(crypto, savefile, thread_counter, conn)
-            return
-        else:
-            thread_counter += 1
-            processes.append(pid)
-            print(len(processes), " processes")
+        if batch_id.type == 0:
+            result_data = b''
 
-    print("<results>: Client done accepting results!")
+            begin_time = time.time()
+            while True:
+                begin_len = len(result_data) 
+                result_data += conn.recv(1000000)
+                end_len = len(result_data)
+
+                if end_len == begin_len:
+                    break
+            end_time = time.time()
+            print("All data for batch received in ", end_time - begin_time, " seconds")
+            file = open('done.sam', 'wb')
+            file.write(result_data)
+            file.close()
+            exit()
+
+            pid = os.fork()
+
+            if not pid:
+                process_results(crypto, savefile, thread_counter, result_data)
+                #receive_and_process_results(crypto, savefile, thread_counter, conn)
+                exit()
+            else:
+                thread_counter += 1
+                processes.append(pid)
+                print(len(processes), " processes")
 
     #code-maven.com/python-fork-and-wait
     while processes:
@@ -456,6 +550,7 @@ def spawn_results_processes(crypto, savefile):
         else:
             processes.remove(pid)
 
+    print("<results>: Client done accepting results!")
     result_socket.close()
 
 def main():
