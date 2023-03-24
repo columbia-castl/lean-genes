@@ -1,0 +1,105 @@
+diff --git a/Makefile b/Makefile
+index 5480536..339c524 100644
+--- a/Makefile
++++ b/Makefile
+@@ -5,7 +5,7 @@ WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
+ AR=			ar
+ DFLAGS=		-DHAVE_PTHREAD $(WRAP_MALLOC)
+ LOBJS=		utils.o kthread.o kstring.o ksw.o bwt.o bntseq.o bwa.o bwamem.o bwamem_pair.o bwamem_extra.o malloc_wrap.o \
+-			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o
++			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o read_pmt.o
+ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
+ 			bwape.o kopen.o pemerge.o maxk.o \
+ 			bwtsw2_core.o bwtsw2_main.o bwtsw2_aux.o bwt_lite.o \
+@@ -49,7 +49,7 @@ bntseq.o: bntseq.h utils.h kseq.h malloc_wrap.h khash.h
+ bwa.o: bntseq.h bwa.h bwt.h ksw.h utils.h kstring.h malloc_wrap.h kvec.h
+ bwa.o: kseq.h
+ bwamem.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h ksw.h kvec.h
+-bwamem.o: ksort.h utils.h kbtree.h
++bwamem.o: ksort.h utils.h kbtree.h read_pmt.h
+ bwamem_extra.o: bwa.h bntseq.h bwt.h bwamem.h kstring.h malloc_wrap.h
+ bwamem_pair.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h kvec.h
+ bwamem_pair.o: utils.h ksw.h
+@@ -74,7 +74,7 @@ bwtsw2_main.o: bwt.h bwtsw2.h bntseq.h bwt_lite.h utils.h bwa.h
+ bwtsw2_pair.o: utils.h bwt.h bntseq.h bwtsw2.h bwt_lite.h kstring.h
+ bwtsw2_pair.o: malloc_wrap.h ksw.h
+ example.o: bwamem.h bwt.h bntseq.h bwa.h kseq.h malloc_wrap.h
+-fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h
++fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h read_pmt.h
+ is.o: malloc_wrap.h
+ kopen.o: malloc_wrap.h
+ kstring.o: kstring.h malloc_wrap.h
+@@ -83,6 +83,7 @@ main.o: kstring.h malloc_wrap.h utils.h
+ malloc_wrap.o: malloc_wrap.h
+ maxk.o: bwa.h bntseq.h bwt.h bwamem.h kseq.h malloc_wrap.h
+ pemerge.o: ksw.h kseq.h malloc_wrap.h kstring.h bwa.h bntseq.h bwt.h utils.h
++read_pmt.o: read_pmt.h
+ rle.o: rle.h
+ rope.o: rle.h rope.h
+ utils.o: utils.h ksort.h malloc_wrap.h kseq.h
+diff --git a/bwamem.c b/bwamem.c
+index 03e2a05..82e9eaa 100644
+--- a/bwamem.c
++++ b/bwamem.c
+@@ -872,7 +872,12 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+ 	kputw((p->flag&0xffff) | (p->flag&0x10000? 0x100 : 0), str); kputc('\t', str); // FLAG
+ 	if (p->rid >= 0) { // with coordinate
+ 		kputs(bns->anns[p->rid].name, str); kputc('\t', str); // RNAME
+-		kputl(p->pos + 1, str); kputc('\t', str); // POS
++		if (opt->pmt == NULL) {
++			kputl(p->pos + 1, str); kputc('\t', str); // POS
++		}
++		else {
++			kputl(opt->pmt[p->pos] + 1, str); kputc('\t', str); //PMT POS
++		}
+ 		kputw(p->mapq, str); kputc('\t', str); // MAPQ
+ 		add_cigar(opt, p, str, which);
+ 	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
+diff --git a/bwamem.h b/bwamem.h
+index 0a0e3bb..26f1472 100644
+--- a/bwamem.h
++++ b/bwamem.h
+@@ -30,6 +30,7 @@
+ #include "bwt.h"
+ #include "bntseq.h"
+ #include "bwa.h"
++#include "read_pmt.h"
+ 
+ #define MEM_MAPQ_COEF 30.0
+ #define MEM_MAPQ_MAX  60
+@@ -81,6 +82,8 @@ typedef struct {
+ 	int max_matesw;         // perform maximally max_matesw rounds of mate-SW for each end
+ 	int max_XA_hits, max_XA_hits_alt; // if there are max_hits or fewer, output them all
+ 	int8_t mat[25];         // scoring matrix; mat[0] == 0 if unset
++	
++	int* pmt;
+ } mem_opt_t;
+ 
+ typedef struct {
+diff --git a/fastmap.c b/fastmap.c
+index be7ba0e..9191c6e 100644
+--- a/fastmap.c
++++ b/fastmap.c
+@@ -156,9 +156,10 @@ int main_mem(int argc, char *argv[])
+ 
+ 	aux.opt = opt = mem_opt_init();
+ 	memset(&opt0, 0, sizeof(mem_opt_t));
+-	while ((c = getopt(argc, argv, "51qpaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
++	while ((c = getopt(argc, argv, "51qpaMCSPVYjuek:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
+ 		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
+ 		else if (c == '1') no_mt_io = 1;
++		else if (c == 'e') opt->pmt = read_pmt();
+ 		else if (c == 'x') mode = optarg;
+ 		else if (c == 'w') opt->w = atoi(optarg), opt0.w = 1;
+ 		else if (c == 'A') opt->a = atoi(optarg), opt0.a = 1;
+@@ -264,6 +265,10 @@ int main_mem(int argc, char *argv[])
+ 	}
+ 
+ 	if (opt->n_threads < 1) opt->n_threads = 1;
++
++	printf("argc: %d\n", argc);
++	printf("optind: %d\n", optind);
++
+ 	if (optind + 1 >= argc || optind + 3 < argc) {
+ 		fprintf(stderr, "\n");
+ 		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");

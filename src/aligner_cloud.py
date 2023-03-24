@@ -99,7 +99,8 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             data_attempts = 0
             while len(data) < (serialized_read_size * leangenes_params["READ_BATCH_SIZE"]):
                 begin_len = len(data)
-                data += conn.recv((serialized_read_size * leangenes_params["READ_BATCH_SIZE"]) - len(data))
+                remaining_len = (serialized_read_size * leangenes_params["READ_BATCH_SIZE"]) - len(data)
+                data += conn.recv(remaining_len)
                 end_len = len(data)
 
                 if (end_len == begin_len) and (end_len % serialized_read_size == 0):
@@ -109,7 +110,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     print("Data now len " + str(len(data)))
                 data_attempts += 1
                 if data_attempts > 10:
-                    print("WARNING: Stuck in data receiving loop!")
+                    print("WARNING: Stuck in data receiving loop! Remaining bytes: ", remaining_len)
 
             read_counter += (len(data) / serialized_read_size)
             print("Reads from client: ", read_counter)

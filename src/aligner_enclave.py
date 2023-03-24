@@ -56,7 +56,10 @@ def dispatch_bwa(bwa_path, fasta, fastq):
     if debug_subprocess: 
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
-        call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        if enclave_settings["enable_bwa_pmt"]:
+            call_bwa = Popen([bwa_path + "bwa", "mem","-e", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        else:
+            call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
 
     if debug:
@@ -441,11 +444,21 @@ def main():
     print("Generate PMT permutation")
     #pmt = gen_permutation(ref_length, read_length)
     pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(ref_length)
+    
     if debug:    
         print(pmt)
-    print("... PMT is generated!")
+        print("... PMT is generated!")
 
-    #PMT generation
+    if enclave_settings["write_pmt"]:
+        print("Write PMT to a file...")
+        pmt_file = open('pmt.csv','w')
+        pmt_file.write(str(len(pmt)) + ":")
+        for entry in pmt[:-1]:
+            pmt_file.write(str(entry) + ",")
+        pmt_file.write(str(pmt[-1]) + "\n")
+        pmt_file.close()
+
+    #PMT transfer via proxy
     if pmt_transfer:
         #Send PMT
         print("Transferring PMT via proxy...")    
