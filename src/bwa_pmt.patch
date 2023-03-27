@@ -1,26 +1,39 @@
 diff --git a/Makefile b/Makefile
-index 5480536..339c524 100644
+index 5480536..0498327 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -5,7 +5,7 @@ WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
+@@ -5,13 +5,13 @@ WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
  AR=			ar
  DFLAGS=		-DHAVE_PTHREAD $(WRAP_MALLOC)
  LOBJS=		utils.o kthread.o kstring.o ksw.o bwt.o bntseq.o bwa.o bwamem.o bwamem_pair.o bwamem_extra.o malloc_wrap.o \
 -			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o
-+			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o read_pmt.o
++			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o read_pmt.o ../tiny-AES-c/aes.o
  AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
  			bwape.o kopen.o pemerge.o maxk.o \
  			bwtsw2_core.o bwtsw2_main.o bwtsw2_aux.o bwt_lite.o \
-@@ -49,7 +49,7 @@ bntseq.o: bntseq.h utils.h kseq.h malloc_wrap.h khash.h
+ 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
+ PROG=		bwa
+-INCLUDES=	
++INCLUDES=	-I../tiny-AES-c	
+ LIBS=		-lm -lz -lpthread
+ SUBDIRS=	.
+ 
+@@ -44,12 +44,13 @@ depend:
+ # DO NOT DELETE THIS LINE -- make depend depends on it.
+ 
+ QSufSort.o: QSufSort.h
++../tiny-AES-c/aes.o: ../tiny-AES-c/aes.h 
+ bamlite.o: bamlite.h malloc_wrap.h
+ bntseq.o: bntseq.h utils.h kseq.h malloc_wrap.h khash.h
  bwa.o: bntseq.h bwa.h bwt.h ksw.h utils.h kstring.h malloc_wrap.h kvec.h
  bwa.o: kseq.h
  bwamem.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h ksw.h kvec.h
 -bwamem.o: ksort.h utils.h kbtree.h
-+bwamem.o: ksort.h utils.h kbtree.h read_pmt.h
++bwamem.o: ksort.h utils.h kbtree.h read_pmt.h ../tiny-AES-c/aes.h
  bwamem_extra.o: bwa.h bntseq.h bwt.h bwamem.h kstring.h malloc_wrap.h
  bwamem_pair.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h kvec.h
  bwamem_pair.o: utils.h ksw.h
-@@ -74,7 +74,7 @@ bwtsw2_main.o: bwt.h bwtsw2.h bntseq.h bwt_lite.h utils.h bwa.h
+@@ -74,7 +75,7 @@ bwtsw2_main.o: bwt.h bwtsw2.h bntseq.h bwt_lite.h utils.h bwa.h
  bwtsw2_pair.o: utils.h bwt.h bntseq.h bwtsw2.h bwt_lite.h kstring.h
  bwtsw2_pair.o: malloc_wrap.h ksw.h
  example.o: bwamem.h bwt.h bntseq.h bwa.h kseq.h malloc_wrap.h
@@ -29,7 +42,7 @@ index 5480536..339c524 100644
  is.o: malloc_wrap.h
  kopen.o: malloc_wrap.h
  kstring.o: kstring.h malloc_wrap.h
-@@ -83,6 +83,7 @@ main.o: kstring.h malloc_wrap.h utils.h
+@@ -83,6 +84,7 @@ main.o: kstring.h malloc_wrap.h utils.h
  malloc_wrap.o: malloc_wrap.h
  maxk.o: bwa.h bntseq.h bwt.h bwamem.h kseq.h malloc_wrap.h
  pemerge.o: ksw.h kseq.h malloc_wrap.h kstring.h bwa.h bntseq.h bwt.h utils.h
@@ -38,10 +51,19 @@ index 5480536..339c524 100644
  rope.o: rle.h rope.h
  utils.o: utils.h ksort.h malloc_wrap.h kseq.h
 diff --git a/bwamem.c b/bwamem.c
-index 03e2a05..82e9eaa 100644
+index 03e2a05..0ad7abb 100644
 --- a/bwamem.c
 +++ b/bwamem.c
-@@ -872,7 +872,12 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -46,6 +46,8 @@
+ #  include "malloc_wrap.h"
+ #endif
+ 
++#define AES_BLOCK_SIZE 16
++
+ /* Theory on probability and scoring *ungapped* alignment
+  *
+  * s'(a,b) = log[P(b|a)/P(b)] = log[4P(b|a)], assuming uniform base distribution
+@@ -872,7 +874,12 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  	kputw((p->flag&0xffff) | (p->flag&0x10000? 0x100 : 0), str); kputc('\t', str); // FLAG
  	if (p->rid >= 0) { // with coordinate
  		kputs(bns->anns[p->rid].name, str); kputc('\t', str); // RNAME
@@ -55,19 +77,111 @@ index 03e2a05..82e9eaa 100644
  		kputw(p->mapq, str); kputc('\t', str); // MAPQ
  		add_cigar(opt, p, str, which);
  	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
+@@ -902,8 +909,42 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+ 			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qb += p->cigar[0]>>4;
+ 			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qe -= p->cigar[p->n_cigar-1]>>4;
+ 		}
+-		ks_resize(str, str->l + (qe - qb) + 1);
+-		for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
++
++		if (opt->pmt == NULL){
++			ks_resize(str, str->l + (qe - qb) + 1);
++			for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
++		}
++		else {	
++			//ADDING ECB ENCRYPTION OF READS.
++			struct AES_ctx ctx;
++			uint8_t key[16];
++
++			//start w 0 key for debugging, etc
++			for (int i = 0; i < 16; i++) {
++				key[i] = 0;
++			}
++
++			AES_init_ctx(&ctx, key);
++
++			ks_resize(str, str->l + (qe - qb) + 1 + ((qe - qb) % AES_BLOCK_SIZE));
++
++			int len_scanned = 0;
++			char data_buf[16];
++			for (i = 0; i < (qe-qb)/16; i++) {
++				for (int j = 0; j < AES_BLOCK_SIZE; j++) {
++					if (len_scanned >= (str->l)){
++						data_buf[j] = 0;
++					}
++					else {
++						data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
++					}
++					len_scanned++;
++				}
++				AES_ECB_encrypt(&ctx, data_buf);
++				kputs(data_buf, str);
++			}
++		}
++
+ 		kputc('\t', str);
+ 		if (s->qual) { // printf qual
+ 			ks_resize(str, str->l + (qe - qb) + 1);
+@@ -916,8 +957,43 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+ 			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qe -= p->cigar[0]>>4;
+ 			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qb += p->cigar[p->n_cigar-1]>>4;
+ 		}
+-		ks_resize(str, str->l + (qe - qb) + 1);
+-		for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
++		
++	
++		if (opt->pmt == NULL) {	
++			ks_resize(str, str->l + (qe - qb) + 1);
++			for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
++		}
++		else {
++			//ADDING ECB ENCRYPTION OF READS.
++			struct AES_ctx ctx;
++			uint8_t key[16];
++
++			ks_resize(str, str->l + (qe - qb) + 1  + ((qe - qb) % AES_BLOCK_SIZE));
++			
++			//TODO start w 0 key for debugging, etc
++			for (int i = 0; i < 16; i++) {
++				key[i] = 0;
++			}
++
++			AES_init_ctx(&ctx, key);
++
++			int len_scanned = 0;
++			char data_buf[16];
++			for (i = 0; i < (qe-qb)/16; i++) {
++				for (int j = 0; j < AES_BLOCK_SIZE; j++) {
++					if (len_scanned >= (str->l)){
++						data_buf[j] = 0;
++					}
++					else {
++						data_buf[j] = "TGCAN"[(int)s->seq[(qe-1) - len_scanned]];
++					}
++					len_scanned++;
++				}
++				AES_ECB_encrypt(&ctx, data_buf);
++				kputs(data_buf, str);
++			}
++		}
++
+ 		kputc('\t', str);
+ 		if (s->qual) { // printf qual
+ 			ks_resize(str, str->l + (qe - qb) + 1);
 diff --git a/bwamem.h b/bwamem.h
-index 0a0e3bb..26f1472 100644
+index 0a0e3bb..91da26b 100644
 --- a/bwamem.h
 +++ b/bwamem.h
-@@ -30,6 +30,7 @@
+@@ -30,6 +30,8 @@
  #include "bwt.h"
  #include "bntseq.h"
  #include "bwa.h"
 +#include "read_pmt.h"
++#include "aes.h"
  
  #define MEM_MAPQ_COEF 30.0
  #define MEM_MAPQ_MAX  60
-@@ -81,6 +82,8 @@ typedef struct {
+@@ -81,6 +83,8 @@ typedef struct {
  	int max_matesw;         // perform maximally max_matesw rounds of mate-SW for each end
  	int max_XA_hits, max_XA_hits_alt; // if there are max_hits or fewer, output them all
  	int8_t mat[25];         // scoring matrix; mat[0] == 0 if unset
