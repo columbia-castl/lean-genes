@@ -471,7 +471,7 @@ def spawn_results_processes(crypto, savefile):
     global result_socket, done_with_bwa, done_with_exact
     result_socket.listen()
 
-    thread_counter = 0
+    batches = 0
     last_bwa_batch = 0
     last_lg_batch = 0
     bwa_set = False
@@ -479,15 +479,11 @@ def spawn_results_processes(crypto, savefile):
 
     processes = []
 
+    file = open('done.sam', 'wb')
+
     while True:
-      
-        if leangenes_params["disable_exact_matching"]:
-            if bwa_set and (thread_counter >= last_bwa_batch):
-                break
-        else:
-            if bwa_set and lg_set:
-                if thread_counter > max(last_bwa_batch, last_lg_batch):
-                    break
+     
+        batches +=1
 
         print("<results>: Wait to accept another process")
         conn, addr = result_socket.accept()
@@ -512,46 +508,53 @@ def spawn_results_processes(crypto, savefile):
             last_lg_batch = batch_id.num 
             lg_set = True
 
-        if batch_id.type == 0:
-            result_data = b''
+        #if batch_id.type == 0:
+        result_data = b''
 
-            begin_time = time.time()
-            while True:
-                begin_len = len(result_data) 
-                result_data += conn.recv(1000000)
-                end_len = len(result_data)
+        begin_time = time.time()
+        while True:
+            begin_len = len(result_data) 
+            result_data += conn.recv(1000000)
+            end_len = len(result_data)
 
-                if end_len == begin_len:
+            if end_len == begin_len:
+                break
+        end_time = time.time()
+        print("All data for batch received in ", end_time - begin_time, " seconds")
+        file.write(result_data)
+
+        if leangenes_params["disable_exact_matching"]:
+            if bwa_set and (batches > last_bwa_batch):
+                print("<results>: Client done accepting results!")
+                file.close() 
+                result_socket.close()
+                break
+        else:
+            if bwa_set and lg_set:
+                if batches >= max(last_bwa_batch, last_lg_batch):
+                    print("<results>: Client done accepting results!")
+                    file.close() 
+                    result_socket.close() 
                     break
-            end_time = time.time()
-            print("All data for batch received in ", end_time - begin_time, " seconds")
-            file = open('done.sam', 'wb')
-            file.write(result_data)
-            file.close()
-            exit()
 
-            pid = os.fork()
-
-            if not pid:
-                process_results(crypto, savefile, thread_counter, result_data)
-                #receive_and_process_results(crypto, savefile, thread_counter, conn)
-                exit()
-            else:
-                thread_counter += 1
-                processes.append(pid)
-                print(len(processes), " processes")
+#            pid = os.fork()
+#            if not pid:
+#                process_results(crypto, savefile, thread_counter, result_data)
+#                receive_and_process_results(crypto, savefile, thread_counter, conn)
+#                exit()
+#            else:
+#                thread_counter += 1
+#                processes.append(pid)
+#                print(len(processes), " processes")
 
     #code-maven.com/python-fork-and-wait
-    while processes:
-        print("Waiting for ", len(processes), " processes")
-        pid, exit_code = os.wait()
-        if pid == 0:
-            time.sleep(1)
-        else:
-            processes.remove(pid)
-
-    print("<results>: Client done accepting results!")
-    result_socket.close()
+#    while processes:
+#        print("Waiting for ", len(processes), " processes")
+#       pid, exit_code = os.wait()
+#       if pid == 0:
+#           time.sleep(1)
+#       else:
+#           processes.remove(pid)
 
 def main():
     global result_socket, pmt

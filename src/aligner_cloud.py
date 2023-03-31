@@ -17,6 +17,8 @@ from vsock_handlers import VsockStream
 debug = pubcloud_settings["debug"]
 do_pmt_proxy = False
 
+matched_reads = queue.Queue()
+
 def client_handler(args): 
     client = VsockStream() 
     endpoint = (args.cid, args.port) 
@@ -68,8 +70,6 @@ def receive_reads(serialized_read_size, crypto, redis_table):
     print("CLIENT THREAD STARTED")
 
     unmatch_batch = b''
-    #unmatched_reads = queue.Queue()
-    matched_reads = queue.Queue()
     read_parser = Read()
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -167,19 +167,11 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                         unmatched_read_counter += 1
                         unmatch_batch += next_read            
 
-                    if matched_reads.qsize() >= leangenes_params["LG_BATCH_SIZE"]:
-                        if exact_read_counter % (leangenes_params["LG_BATCH_SIZE"]) == 0:
-                            print("Trigger normal exact match batch")
-
-                            batch_id = BatchID()
-                            batch_id.num = batch_counter
-                            batch_id.type = 0
-
-                            batch_queue = queue.Queue()
-                            for i in range(leangenes_params["LG_BATCH_SIZE"]):
-                                batch_queue.put(matched_reads.get())
-                            match_serializer_thread = threading.Thread(target=serialize_exact_batch, args=(batch_queue, batch_id,))
-                            match_serializer_thread.start()
+                    if not (exact_read_counter % leangenes_params["LG_BATCH_SIZE"]):
+                        if exact_read_counter:
+                            print("Trigger normal exact match batch, exact read counter = ",exact_read_counter)
+                            exma_thread = threading.Thread(target=send_exact_batch_to_client, args= (batch_counter,))
+                            exma_thread.start() 
                             batch_counter += 1
 
                     if not (unmatched_read_counter % leangenes_params["BWA_BATCH_SIZE"]): 
@@ -225,17 +217,14 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             unmatched_socket.close()
             exit()
         else:
-            pass
+            unmatch_batch = b'' 
 
         #FLUSH EXTRA EXACT MATCHES WHEN ENABLED
         if not leangenes_params["disable_exact_matching"]:    
             pid = os.fork()
             if not pid:
                 print("Process is serializing final batch")
-                batch_id = BatchID()
-                batch_id.num = batch_counter + 1
-                batch_id.type = 2
-                serialize_exact_batch(matched_reads, batch_id)
+                send_exact_batch_to_client(batch_counter + 1, True)
                 exit()
             else:
                 while not matched_reads.empty():
@@ -263,16 +252,39 @@ def send_unmatches_to_enclave(unmatches, batch_id):
         
     unmatched_socket.close()
 
+def send_exact_batch_to_client(batch_counter, last=False):
+    global matched_reads
+
+    batch_id = BatchID()
+    batch_id.num = batch_counter
+    if not last:
+        batch_id.type = 0
+    else:
+        batch_id.type = 2
+
+    batch_queue = queue.Queue()
+
+    num_to_serialize = min(leangenes_params["LG_BATCH_SIZE"], matched_reads.qsize())
+    
+    print(num_to_serialize, " results to serialize")
+    for i in range(num_to_serialize):
+        batch_queue.put(matched_reads.get())
+    serialize_exact_batch(batch_queue, batch_id)
+
+
 def serialize_exact_batch(match_queue, batch_id):
     serialized_queue = queue.Queue() 
     read_parser = Read() 
 
     print("--> <exact match serializer>: serializing an exact batch")
-
+    
+    num_serialized = 0
     while not match_queue.empty():
         read, read_found = match_queue.get()
         read_parser.ParseFromString(read)
         serialized_queue.put(serialize_exact_match(read_parser.read, read_parser.align_score, read_found))
+        num_serialized += 1
+    print(num_serialized, " results have been serialized")
 
     matched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     matched_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
@@ -286,6 +298,7 @@ def serialize_exact_batch(match_queue, batch_id):
         matched_socket.send(match_buf[1])
 
     matched_socket.close()
+    print("--> <exact match serializer>: Finished sending serialized batch.") 
     return True
 
 def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
