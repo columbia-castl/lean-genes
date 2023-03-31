@@ -519,9 +519,12 @@ def spawn_results_processes(crypto, savefile):
 
             if end_len == begin_len:
                 break
-        end_time = time.time()
-        print("All data for batch received in ", end_time - begin_time, " seconds")
+
+        receive_data_time = time.time()
+        print("All data for batch received in ", receive_data_time - begin_time, " seconds")
         file.write(result_data)
+        write_file_time = time.time()
+        print("Data received + written in ", write_file_time - begin_time, " seconds")
 
         if leangenes_params["disable_exact_matching"]:
             if bwa_set and (batches > last_bwa_batch):

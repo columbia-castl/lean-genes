@@ -26,7 +26,7 @@ message Result {
 	required bytes pnext = 9;
 	required bytes tlen = 10;
 	required bytes seq = 11;
-	required string qual = 12;
+	required bytes qual = 12;
 	optional bytes additional_fields = 13;
 }
 

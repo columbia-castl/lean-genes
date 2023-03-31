@@ -269,8 +269,37 @@ def send_exact_batch_to_client(batch_counter, last=False):
     print(num_to_serialize, " results to serialize")
     for i in range(num_to_serialize):
         batch_queue.put(matched_reads.get())
-    serialize_exact_batch(batch_queue, batch_id)
+    #serialize_exact_batch(batch_queue, batch_id)
+    make_exact_batch_string(batch_queue, batch_id)
 
+def make_exact_batch_string(match_queue, batch_id):
+    read_parser = Read() 
+
+    print("--> <exact matchmaker>: make exact batch string")
+    
+    num_processed = 0
+    match_batch = b''
+
+    while not match_queue.empty():
+        read, read_found = match_queue.get()
+        read_parser.ParseFromString(read)
+        match_batch += make_exact_read_bytestring(read_parser.read, bytes(read_parser.align_score, 'utf-8'), read_found)
+        num_processed += 1
+    print(num_processed, " results have been processed")
+
+    matched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    matched_socket.connect((pubcloud_settings["client_ip"], pubcloud_settings["result_port"]))
+
+    matched_socket.send(_VarintBytes(batch_id.ByteSize()))
+    matched_socket.send(batch_id.SerializeToString())
+    matched_socket.send(match_batch)
+    matched_socket.close()
+
+    print("--> <exact matchmaker>: Finished sending exact batch.") 
+    return True
+
+def make_exact_read_bytestring(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
+    return qname + b'\t0\t' + rname + b'\t' + pos + b'\t60\t*\t*\t0\t0\t' + seq + b'\t' + qual + b'\n'
 
 def serialize_exact_batch(match_queue, batch_id):
     serialized_queue = queue.Queue() 
@@ -316,7 +345,7 @@ def serialize_exact_match(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
     new_result.qual = qual
 
     return (_VarintBytes(new_result.ByteSize()), new_result.SerializeToString())
-        
+
 def get_bwa_results(bwa_socket):
 
     print("ENCLAVE SIDE THREAD STARTS")
