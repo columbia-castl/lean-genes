@@ -4,6 +4,7 @@ import socket
 import os
 import threading
 import queue
+import time
 
 from aligner_config import global_settings, pubcloud_settings, genome_params, leangenes_params
 from reads_pb2 import Read, PMT_Entry, Result, BatchID
@@ -87,8 +88,13 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
         print("CLIENT CONNECTION ESTABLISHED!")
 
+        if leangenes_params["disable_exact_matching"]:
+            receive_factor = leangenes_params["BWA_BATCH_SIZE"]
+        else:
+            receive_factor = max(leangenes_params["BWA_BATCH_SIZE"], leangenes_params["LG_BATCH_SIZE"])
+
         while True:
-            data = conn.recv(serialized_read_size * leangenes_params["READ_BATCH_SIZE"])
+            data = conn.recv(serialized_read_size * receive_factor)
            
             if data == b'':
                 break
@@ -97,9 +103,9 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 print("-->received data " + str(read_counter))
 
             data_attempts = 0
-            while len(data) < (serialized_read_size * leangenes_params["READ_BATCH_SIZE"]):
+            while len(data) < (serialized_read_size * receive_factor):
                 begin_len = len(data)
-                remaining_len = (serialized_read_size * leangenes_params["READ_BATCH_SIZE"]) - len(data)
+                remaining_len = (serialized_read_size * receive_factor) - len(data)
                 data += conn.recv(remaining_len)
                 end_len = len(data)
 
@@ -148,7 +154,11 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     if debug:
                         decrypted_data = crypto.decrypt(read_parser.read)
 
+                    #redis_time_1 = time.time() 
                     read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
+                    #redis_time_2 = time.time()
+                    #print(redis_time_2 - redis_time_1, " was redis latency")
+
                     if read_found != None:
                         if debug: 
                             print("Exact match read found.")
@@ -175,25 +185,26 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             batch_counter += 1
 
                     if not (unmatched_read_counter % leangenes_params["BWA_BATCH_SIZE"]): 
-                        print("Trigger normal BWA batch") 
-                        
-                        batch_id = BatchID()
-                        batch_id.num = batch_counter
-                        batch_id.type = 0
+                        if unmatched_read_counter: 
+                            print("Trigger normal BWA batch") 
+                            
+                            batch_id = BatchID()
+                            batch_id.num = batch_counter
+                            batch_id.type = 0
 
-                        print("<unmatch_sender>: --> sending ", leangenes_params["BWA_BATCH_SIZE"]  ," non-matches to the enclave")
+                            print("<unmatch_sender>: --> sending ", leangenes_params["BWA_BATCH_SIZE"]  ," non-matches to the enclave")
 
-                        unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-                        
-                        unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
-                        unmatched_socket.send(batch_id.SerializeToString())
-                        unmatched_socket.send(unmatch_batch)
-                        
-                        unmatched_socket.close()
-                        
-                        unmatch_batch = b''
-                        batch_counter += 1
+                            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+                            
+                            unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
+                            unmatched_socket.send(batch_id.SerializeToString())
+                            unmatched_socket.send(unmatch_batch)
+                            
+                            unmatched_socket.close()
+                            
+                            unmatch_batch = b''
+                            batch_counter += 1
 
         conn.close()
 
