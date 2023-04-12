@@ -66,6 +66,9 @@ To run it, simply enter this command into the terminal
 If you do not wish to run the script interactively, provide the FASTQ of reads you wish to map as a command line argument, i.e.:
  `` python3 aligner_client.py my_fastq.fastq ``
 
+To use the post-processor, compilation command is:
+`` gcc post_process.c read_pmt.c ../tiny-AES-c/aes.c -o post_proc -I../tiny-AES-c ``
+
 ##### ``test_data`` folder
 This folder contains some example FASTQ and FASTA files that were used to verify the functionality of this tool before scaling it up to full chromosomes and genomes, as well as some example SAM results created by running the tool previously in tests, etc. for verification.
 

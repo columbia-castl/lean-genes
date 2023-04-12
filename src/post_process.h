@@ -1,10 +1,13 @@
 #include "aes.h"
+#include "read_pmt.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#define READ_LENGTH 151
+#define READ_LENGTH 15
 #define AES_BLOCK_SIZE 16
 #define SAM_NAME "done.sam"
+#define FULL_SAM_LINE_LEN 11
 
 struct sam_line{
 	char qname[20];
@@ -16,9 +19,7 @@ struct sam_line{
 	char rnext;
 	char pnext;
 	char tlen;
-	//NOTE: THIS SHOULD BE UNCOMMENTED WHEN READ LENGTH IS LONGER	
-	//char seq[READ_LENGTH + (READ_LENGTH % AES_BLOCK_SIZE)];
-	char seq[READ_LENGTH];
+	char seq[READ_LENGTH + (AES_BLOCK_SIZE - (READ_LENGTH % AES_BLOCK_SIZE))];
 	char qual[READ_LENGTH];	
 };
 

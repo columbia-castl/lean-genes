@@ -1,7 +1,15 @@
 #include "read_pmt.h"
 
-int* read_pmt() {
-	FILE* pmt_file = fopen("pmt.csv","r");
+int* read_pmt(int type) {
+
+	FILE* pmt_file;
+	if (type) {
+		pmt_file = fopen("ipmt.csv","r");
+	}
+	else {
+		pmt_file = fopen("pmt.csv","r");
+	}
+	
 	int* pmt_buf = NULL;
 
 	if (pmt_file == NULL) {

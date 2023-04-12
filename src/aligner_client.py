@@ -559,6 +559,21 @@ def spawn_results_processes(crypto, savefile):
 #       else:
 #           processes.remove(pid)
 
+def write_ipmt():
+    global pmt
+
+    ipmt = [0 for i in range(len(pmt))]
+    for i in range(len(pmt)):
+        ipmt[pmt[i]] = i
+
+    print("Write iPMT to file....")
+    ipmt_file = open('ipmt.csv','w')
+    ipmt_file.write(str(len(ipmt)) + ":")
+    for entry in ipmt[:-1]:
+        ipmt_file.write(str(entry) + ",")
+    ipmt_file.write(str(ipmt[-1]) + "\n")
+    ipmt_file.close()
+
 def main():
     global result_socket, pmt
 
@@ -569,6 +584,10 @@ def main():
     if debug:
         print("PMT")
         print(pmt)
+
+    if client_settings["write_ipmt"]:
+        write_ipmt()
+        #exit()
 
     print("Client initialized")
     if len(sys.argv) > 1:
