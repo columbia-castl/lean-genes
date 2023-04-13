@@ -22,7 +22,7 @@ int* read_pmt(int type) {
 
 		items_scanned = fscanf(pmt_file, "%d:", &perm_len);
 
-		printf("Perm len is %d\n", perm_len);
+		//printf("Perm len is %d\n", perm_len);
 
 		pmt_buf = (int*) malloc(perm_len * sizeof(int));
 		int buf_index = 0;
@@ -49,7 +49,7 @@ int* read_pmt(int type) {
 	}
 	
 	fclose(pmt_file);	
-	printf("PMT fully scanned.\n");
+	//printf("PMT fully scanned.\n");
 	return pmt_buf;
 }
 

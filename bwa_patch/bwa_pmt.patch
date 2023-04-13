@@ -191,7 +191,7 @@ index 0a0e3bb..91da26b 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..1415f27 100644
+index be7ba0e..39e7e41 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -156,9 +156,10 @@ int main_mem(int argc, char *argv[])
@@ -211,8 +211,8 @@ index be7ba0e..1415f27 100644
  
  	if (opt->n_threads < 1) opt->n_threads = 1;
 +
-+	printf("argc: %d\n", argc);
-+	printf("optind: %d\n", optind);
++	//printf("argc: %d\n", argc);
++	//printf("optind: %d\n", optind);
 +
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
