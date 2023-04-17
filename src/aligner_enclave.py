@@ -457,6 +457,7 @@ def main():
             pmt_file.write(str(entry) + ",")
         pmt_file.write(str(pmt[-1]) + "\n")
         pmt_file.close()
+        print("Finished writing PMT")
 
     #PMT transfer via proxy
     if pmt_transfer:
