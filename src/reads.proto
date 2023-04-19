@@ -5,6 +5,7 @@ package lean_genes;
 message BatchID {
 	required int32 num = 1;
 	required int32 type = 2;
+	optional bytes encrypted_seqs = 3;
 }
 
 message Read {

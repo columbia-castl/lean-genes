@@ -115,8 +115,25 @@ def sam_sender(sam_data, batch_id):
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
-    bwa_socket.send(_VarintBytes(batch_id.ByteSize()))
-    bwa_socket.send(batch_id.SerializeToString())
+    try:
+        enc_reads = open('encrypted.bytes', 'rb')
+        batch_id.encrypted_seqs = enc_reads.read()
+        print("Len of encrypted bytes", len(batch_id.encrypted_seqs))
+        enc_reads.close()
+        os.remove("encrypted.bytes") 
+    except FileNotFoundError:
+        pass
+
+    enc_size = _VarintBytes(batch_id.ByteSize())
+    print("Encoded size len", len(enc_size))
+    print("Size: ", batch_id.ByteSize())
+
+    bwa_socket.send(enc_size)
+
+    batch_bytes = batch_id.SerializeToString()
+    bwa_socket.send(batch_bytes)
+    if debug:
+        print(batch_bytes)
 
     PARSING_STATE = SamState.PROCESSING_HEADER
 
@@ -180,8 +197,10 @@ def sam_sender(sam_data, batch_id):
 #    bwa_socket.send(result_bytes)
 #    result_bytes = b''
     #if debug:
-    print(result_counter, " results were sent from this batch.")
+   
     bwa_socket.send(sam_data)
+    
+    #print(result_counter, " results were sent from this batch.")
     bwa_socket.close()
 
 def server_handler(port):
