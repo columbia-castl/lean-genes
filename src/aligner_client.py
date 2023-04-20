@@ -479,35 +479,42 @@ def spawn_results_processes(crypto, savefile):
 
     processes = []
 
-    sam_file = open('done.sam', 'wb')
-    read_file = open('enclave.bytes', 'ab')
-
     while True:
-     
+
+        sam_file = open('lg_out_' + str(batches) + ".sam", 'wb')
+        read_file = open('enclave_' + str(batches) + '.bytes', 'wb')
+    
         batches +=1
 
         print("<results>: Wait to accept another process")
         conn, addr = result_socket.accept()
         print("<results>: Client receives connection. Spawn result processor")
         
-        size_bytes = conn.recv(2)
+        size_bytes = conn.recv(10)
         size, ids = _DecodeVarint32(size_bytes, 0)
-        print("size:", size)
-        print("ids:", ids)
-        print("len(size bytes):", len(size_bytes))
-       
+        
+        if debug:
+            print("size:", size)
+            print("ids:", ids)
+            print("len(size bytes):", len(size_bytes))
+           
         batch_bytes = b''
+         
         if (size > len(size_bytes[ids:])):
             batch_bytes = size_bytes[ids:] + conn.recv(size - len(size_bytes[ids:]))
         else:
-            batch_bytes = size_bytes[ids:]
+            batch_bytes = size_bytes[ids:ids+size]
+
+        while len(batch_bytes) < size:
+            batch_bytes += conn.recv(size - len(batch_bytes))
 
         batch_id = BatchID()
         check_id = batch_id.ParseFromString(batch_bytes)
+        print("This batch was able to check its id")
 
         print("Batch #", batch_id.num)
         print("Batch ID Type: ", batch_id.type)
-
+        print("|Encrypted Bytes|: ", len(batch_id.encrypted_seqs))
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
             last_bwa_batch = batch_id.num
@@ -535,18 +542,19 @@ def spawn_results_processes(crypto, savefile):
         sam_file.write(result_data)
         write_file_time = time.time()
         print("Data received + written in ", write_file_time - begin_time, " seconds")
+        
+        sam_file.close() 
+        read_file.close()
 
         if leangenes_params["disable_exact_matching"]:
             if bwa_set and (batches > last_bwa_batch):
                 print("<results>: Client done accepting results!")
-                sam_file.close() 
-                result_socket.close()
+                result_socket.close() 
                 break
         else:
             if bwa_set and lg_set:
                 if batches >= max(last_bwa_batch, last_lg_batch):
                     print("<results>: Client done accepting results!")
-                    sam_file.close() 
                     result_socket.close() 
                     break
 

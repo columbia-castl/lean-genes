@@ -47,7 +47,7 @@ def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "bwa index " + fasta + " &")
 
-def dispatch_bwa(bwa_path, fasta, fastq):
+def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
     
     if debug:
         print("Passing batched FASTQ to BWA...")
@@ -57,7 +57,7 @@ def dispatch_bwa(bwa_path, fasta, fastq):
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
         if enclave_settings["enable_bwa_pmt"]:
-            call_bwa = Popen([bwa_path + "bwa", "mem","-e", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            call_bwa = Popen([bwa_path + "bwa", "mem","-e", str(batch_id.num), fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
         else:
             call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     stdout_data = call_bwa.communicate(input=fastq)[0]
@@ -116,13 +116,13 @@ def sam_sender(sam_data, batch_id):
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
     try:
-        enc_reads = open('encrypted.bytes', 'rb')
+        enc_reads = open('encrypted.bytes_' + str(batch_id.num), 'rb')
         batch_id.encrypted_seqs = enc_reads.read()
         print("Len of encrypted bytes", len(batch_id.encrypted_seqs))
         enc_reads.close()
-        os.remove("encrypted.bytes") 
+        os.remove('encrypted.bytes_' + str(batch_id.num)) 
     except FileNotFoundError:
-        pass
+        print("There was no encrypted bytes file for this batch.")
 
     enc_size = _VarintBytes(batch_id.ByteSize())
     print("Encoded size len", len(enc_size))
@@ -440,7 +440,7 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
         print("FASTQ: ", fastq_bytes)
         print("FASTQ len: ", len(fastq_bytes))
 
-    returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes)
+    returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes, batch_id)
     
     if debug: 
         print(returned_sam)
