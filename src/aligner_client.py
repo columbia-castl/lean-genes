@@ -499,11 +499,13 @@ def spawn_results_processes(crypto, savefile):
             print("len(size bytes):", len(size_bytes))
            
         batch_bytes = b''
-         
+        result_data = b''
+
         if (size > len(size_bytes[ids:])):
             batch_bytes = size_bytes[ids:] + conn.recv(size - len(size_bytes[ids:]))
         else:
             batch_bytes = size_bytes[ids:ids+size]
+            result_data += size_bytes[ids+size:]
 
         while len(batch_bytes) < size:
             batch_bytes += conn.recv(size - len(batch_bytes))
@@ -524,9 +526,6 @@ def spawn_results_processes(crypto, savefile):
             last_lg_batch = batch_id.num 
             lg_set = True
 
-        #if batch_id.type == 0:
-        result_data = b''
-
         begin_time = time.time()
         while True:
             begin_len = len(result_data) 
@@ -539,6 +538,10 @@ def spawn_results_processes(crypto, savefile):
         receive_data_time = time.time()
         print("All data for batch received in ", receive_data_time - begin_time, " seconds")
         read_file.write(batch_id.encrypted_seqs)
+        
+        if debug:
+            print(result_data)
+        
         sam_file.write(result_data)
         write_file_time = time.time()
         print("Data received + written in ", write_file_time - begin_time, " seconds")
@@ -550,13 +553,16 @@ def spawn_results_processes(crypto, savefile):
             if bwa_set and (batches > last_bwa_batch):
                 print("<results>: Client done accepting results!")
                 result_socket.close() 
+                dispatch_post_proc()
                 break
         else:
             if bwa_set and lg_set:
                 if batches >= max(last_bwa_batch, last_lg_batch):
                     print("<results>: Client done accepting results!")
                     result_socket.close() 
+                    dispatch_post_proc()
                     break
+
 
 #            pid = os.fork()
 #            if not pid:
@@ -592,6 +598,9 @@ def write_ipmt():
     ipmt_file.write(str(ipmt[-1]) + "\n")
     ipmt_file.close()
 
+def dispatch_post_proc():
+    os.system("./post_process.sh")
+
 def main():
     global result_socket, pmt
 
@@ -605,7 +614,7 @@ def main():
 
     if client_settings["write_ipmt"]:
         write_ipmt()
-        #exit()
+        exit()
 
     print("Client initialized")
     if len(sys.argv) > 1:

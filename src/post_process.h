@@ -7,8 +7,8 @@
 
 #define READ_LENGTH 151
 #define AES_BLOCK_SIZE 16
-#define SAM_NAME "done.sam"
-#define ENCRYPTED_NAME "encrypted.bytes"
+#define SAM_NAME "lg_out.sam"
+#define ENCRYPTED_NAME "enclave.bytes"
 #define PROCESSED_NAME "stitched.sam"
 #define FULL_SAM_LINE_LEN 11
 
