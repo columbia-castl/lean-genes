@@ -586,6 +586,8 @@ def spawn_results_processes(crypto, savefile):
 def write_ipmt():
     global pmt
 
+    begin_time = time.time()
+
     ipmt = [0 for i in range(len(pmt))]
     for i in range(len(pmt)):
         ipmt[pmt[i]] = i
@@ -598,8 +600,14 @@ def write_ipmt():
     ipmt_file.write(str(ipmt[-1]) + "\n")
     ipmt_file.close()
 
+    end_time = time.time()
+    print("iPMT generated and written in ", end_time - begin_time, " seconds")
+
 def dispatch_post_proc():
+    begin_time = time.time()
     os.system("./post_process.sh")
+    end_time = time.time()
+    print("Post-processor executed in", end_time - begin_time, " seconds")
 
 def main():
     global result_socket, pmt
@@ -607,7 +615,11 @@ def main():
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', client_settings["result_port"]))
 
+    begin_time = time.time()
     pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
+    end_time = time.time()
+    print("PMT permutation generated in ", end_time - begin_time, "seconds.")
+
     if debug:
         print("PMT")
         print(pmt)

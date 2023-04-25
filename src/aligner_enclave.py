@@ -407,6 +407,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
             unmatched_counter += len(data) / serialized_read_size 
             print("Reads from cloud: ", unmatched_counter)
 
+            begin_time = time.time()
             while data:
                 next_read = data[0: serialized_read_size]
                 data = data[serialized_read_size:]
@@ -423,6 +424,8 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
 
                 unmatched_fastq += "+\n"
                 unmatched_fastq += str(read_parser.align_score) + "\n"
+            end_time = time.time()
+            print("FASTQ assembled in ", end_time - begin_time, " seconds")
 
         #FLUSH READS
         #if debug:
@@ -440,13 +443,19 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
         print("FASTQ: ", fastq_bytes)
         print("FASTQ len: ", len(fastq_bytes))
 
+    begin_time = time.time()
     returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes, batch_id)
-    
+    end_time = time.time()
+    print("BWA-meme runs in ", end_time - begin_time, " seconds")
+
     if debug: 
         print(returned_sam)
         print("BWA RETURNS ^^")
+
+    begin_time = time.time()
     sam_sender(returned_sam, batch_id) 
-     
+    end_time = time.time()
+    print("SAM is sent in ", end_time - begin_time, " seconds")
 
 def main():
     global pmt
