@@ -294,7 +294,8 @@ def make_exact_batch_string(match_queue, batch_id):
     while not match_queue.empty():
         read, read_found = match_queue.get()
         read_parser.ParseFromString(read)
-        match_batch += make_exact_read_bytestring(read_parser.read, bytes(read_parser.align_score, 'utf-8'), read_found)
+        match_batch += make_exact_read_bytestring(bytes(read_parser.align_score, 'utf-8'), read_found)
+        batch_id.encrypted_seqs += read_parser.read
         num_processed += 1
     print(num_processed, " results have been processed")
 
@@ -309,8 +310,8 @@ def make_exact_batch_string(match_queue, batch_id):
     print("--> <exact matchmaker>: Finished sending exact batch.") 
     return True
 
-def make_exact_read_bytestring(seq, qual, pos, qname=b"unlabeled", rname=b"LG"):
-    return qname + b'\t0\t' + rname + b'\t' + pos + b'\t60\t*\t*\t0\t0\t' + seq + b'\t' + qual + b'\n'
+def make_exact_read_bytestring(qual, pos, qname=b"unlabeled", rname=b"LG"):
+    return qname + b'\t0\t' + rname + b'\t' + pos + b'\t60\t*\t*\t0\t0\t*\t' + qual + b'\n'
 
 def serialize_exact_batch(match_queue, batch_id):
     serialized_queue = queue.Queue() 

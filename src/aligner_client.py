@@ -557,7 +557,7 @@ def spawn_results_processes(crypto, savefile):
                 break
         else:
             if bwa_set and lg_set:
-                if batches >= max(last_bwa_batch, last_lg_batch):
+                if batches > max(last_bwa_batch, last_lg_batch):
                     print("<results>: Client done accepting results!")
                     result_socket.close() 
                     dispatch_post_proc()
