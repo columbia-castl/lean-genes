@@ -115,6 +115,10 @@ def sam_sender(sam_data, batch_id):
     bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
+    header_len = 3
+    if len(sam_lines) >= header_len:
+        batch_id.sam_header = sam_lines[0] + b'\n' + sam_lines[1] + b'\n' + sam_lines[2] + b'\n'
+    
     try:
         enc_reads = open('encrypted.bytes_' + str(batch_id.num), 'rb')
         batch_id.encrypted_seqs = enc_reads.read()

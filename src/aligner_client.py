@@ -476,6 +476,7 @@ def spawn_results_processes(crypto, savefile):
     last_lg_batch = 0
     bwa_set = False
     lg_set = False
+    have_header = False
 
     processes = []
 
@@ -520,7 +521,12 @@ def spawn_results_processes(crypto, savefile):
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
             last_bwa_batch = batch_id.num
-            bwa_set = True 
+            bwa_set = True
+            if not have_header:
+                header = open('header.sam', 'wb')
+                header.write(batch_id.sam_header)
+                header.close()
+                have_header = True
         elif batch_id.type == 2: 
             print("<results>: Last LG batch num indicated")
             last_lg_batch = batch_id.num 

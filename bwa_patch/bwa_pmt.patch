@@ -51,7 +51,7 @@ index 5480536..0498327 100644
  rope.o: rle.h rope.h
  utils.o: utils.h ksort.h malloc_wrap.h kseq.h
 diff --git a/bwamem.c b/bwamem.c
-index 03e2a05..5e6d757 100644
+index 03e2a05..63a37af 100644
 --- a/bwamem.c
 +++ b/bwamem.c
 @@ -46,6 +46,8 @@
@@ -63,7 +63,7 @@ index 03e2a05..5e6d757 100644
  /* Theory on probability and scoring *ungapped* alignment
   *
   * s'(a,b) = log[P(b|a)/P(b)] = log[4P(b|a)], assuming uniform base distribution
-@@ -872,7 +874,12 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -872,7 +874,18 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  	kputw((p->flag&0xffff) | (p->flag&0x10000? 0x100 : 0), str); kputc('\t', str); // FLAG
  	if (p->rid >= 0) { // with coordinate
  		kputs(bns->anns[p->rid].name, str); kputc('\t', str); // RNAME
@@ -72,12 +72,18 @@ index 03e2a05..5e6d757 100644
 +			kputl(p->pos + 1, str); kputc('\t', str); // POS
 +		}
 +		else {
-+			kputl(opt->pmt[p->pos] + 1, str); kputc('\t', str); //PMT POS
++			if (p->pos < opt->pmt->pmt_size) {	
++				kputl(opt->pmt->pmt_table[p->pos] + 1, str); kputc('\t', str); //PMT POS
++			}
++			else {
++				fprintf(stderr, "BWA-meme error! Wrong PMT loaded.\n");
++				exit(1);
++			}
 +		}
  		kputw(p->mapq, str); kputc('\t', str); // MAPQ
  		add_cigar(opt, p, str, which);
  	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
-@@ -902,8 +909,62 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -902,8 +915,62 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qb += p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qe -= p->cigar[p->n_cigar-1]>>4;
  		}
@@ -142,7 +148,7 @@ index 03e2a05..5e6d757 100644
  		kputc('\t', str);
  		if (s->qual) { // printf qual
  			ks_resize(str, str->l + (qe - qb) + 1);
-@@ -916,9 +977,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -916,9 +983,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qe -= p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qb += p->cigar[p->n_cigar-1]>>4;
  		}
@@ -211,7 +217,7 @@ index 03e2a05..5e6d757 100644
  			ks_resize(str, str->l + (qe - qb) + 1);
  			for (i = qe-1; i >= qb; --i) str->s[str->l++] = s->qual[i];
 diff --git a/bwamem.h b/bwamem.h
-index 0a0e3bb..570a583 100644
+index 0a0e3bb..fd09605 100644
 --- a/bwamem.h
 +++ b/bwamem.h
 @@ -30,10 +30,15 @@
@@ -235,14 +241,14 @@ index 0a0e3bb..570a583 100644
  	int max_XA_hits, max_XA_hits_alt; // if there are max_hits or fewer, output them all
  	int8_t mat[25];         // scoring matrix; mat[0] == 0 if unset
 +	
-+	int* pmt;
++	struct pmt_struct* pmt;
 +	FILE* encrypt_out;
 +	int batch_id;
  } mem_opt_t;
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..8305ff7 100644
+index be7ba0e..421128b 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -156,7 +156,7 @@ int main_mem(int argc, char *argv[])
@@ -287,11 +293,15 @@ index be7ba0e..8305ff7 100644
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -394,6 +413,7 @@ int main_mem(int argc, char *argv[])
+@@ -394,6 +413,11 @@ int main_mem(int argc, char *argv[])
  	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
  	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
  	free(hdr_line);
-+	if (opt->pmt != NULL) fclose(opt->encrypt_out);
++	if (opt->pmt != NULL) {
++		fclose(opt->encrypt_out);
++		free(opt->pmt->pmt_table);
++		free(opt->pmt);
++	}
  	free(opt);
  	bwa_idx_destroy(aux.idx);
  	kseq_destroy(aux.ks);

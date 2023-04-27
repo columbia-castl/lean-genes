@@ -6,6 +6,7 @@ message BatchID {
 	required int32 num = 1;
 	required int32 type = 2;
 	optional bytes encrypted_seqs = 3;
+	optional bytes sam_header = 4;
 }
 
 message Read {

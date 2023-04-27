@@ -68,7 +68,7 @@ void print_sam_line_struct(struct sam_line* line_reader){
 
 int main() {
 	//return the iPMT
-	int* i_pmt = read_pmt(INVERSE);
+	struct pmt_struct* i_pmt = read_pmt(INVERSE);
 	//exit(1);
 
 	//then scan thru the SAM file using the above fcns
@@ -120,7 +120,15 @@ int main() {
 			continue;
 		}
 		else {
-			int new_pos = i_pmt[(int)line_reader->pos];
+			int new_pos;	
+			if ((int)line_reader->pos < i_pmt->pmt_size) {	
+				new_pos = i_pmt->pmt_table[(int)line_reader->pos];
+			}
+			else {
+				fprintf(stderr, "Post processor unable to load correct iPMT. Please regenerate w client.\n");
+				fprintf(stderr, "iPMT size is %d, attempted loc %d\n", i_pmt->pmt_size, line_reader->pos);	
+				exit(1);
+			}
 			if (DEBUG) printf("Old pos: %ld, ", line_reader->pos);
 			line_reader->pos = new_pos;
 			if (DEBUG) printf("new pos: %ld\n", line_reader->pos);

@@ -145,6 +145,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 data = b''
 
             else:
+                total_redis_time = 0
                 while data:
                     next_read = data[0: serialized_read_size]
                     data = data[serialized_read_size:]
@@ -154,10 +155,10 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                     if debug:
                         decrypted_data = crypto.decrypt(read_parser.read)
 
-                    #redis_time_1 = time.time() 
+                    redis_time_1 = time.time() 
                     read_found = redis_table.get(int.from_bytes(read_parser.hash, 'big'))
-                    #redis_time_2 = time.time()
-                    #print(redis_time_2 - redis_time_1, " was redis latency")
+                    redis_time_2 = time.time()
+                    total_redis_time += (redis_time_2 - redis_time_1)
 
                     if read_found != None:
                         if debug: 
@@ -207,6 +208,9 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             batch_counter += 1
 
         conn.close()
+
+        if not leangenes_params["disable_exact_matching"]:
+            print("Total DB access time ", total_redis_time, " seconds")
 
         #FLUSH EXTRA UNALIGNED READS TO ENCLAVE
         pid = os.fork()
@@ -266,6 +270,8 @@ def send_unmatches_to_enclave(unmatches, batch_id):
 def send_exact_batch_to_client(batch_counter, last=False):
     global matched_reads
 
+    begin_time = time.time()
+
     batch_id = BatchID()
     batch_id.num = batch_counter
     if not last:
@@ -282,6 +288,10 @@ def send_exact_batch_to_client(batch_counter, last=False):
         batch_queue.put(matched_reads.get())
     #serialize_exact_batch(batch_queue, batch_id)
     make_exact_batch_string(batch_queue, batch_id)
+
+    end_time = time.time()
+
+    print("Send exact batch to client in ", end_time - begin_time, " seconds")
 
 def make_exact_batch_string(match_queue, batch_id):
     read_parser = Read() 
