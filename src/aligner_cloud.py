@@ -146,6 +146,10 @@ def receive_reads(serialized_read_size, crypto, redis_table):
 
             else:
                 total_redis_time = 0
+
+                last_exact_counter = 0
+                last_unmatch_counter = 0
+
                 while data:
                     next_read = data[0: serialized_read_size]
                     data = data[serialized_read_size:]
@@ -179,15 +183,16 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                         unmatch_batch += next_read            
 
                     if not (exact_read_counter % leangenes_params["LG_BATCH_SIZE"]):
-                        if exact_read_counter:
+                        if exact_read_counter and (exact_read_counter != last_exact_counter):
                             print("Trigger normal exact match batch, exact read counter = ",exact_read_counter)
                             exma_thread = threading.Thread(target=send_exact_batch_to_client, args= (batch_counter,))
                             exma_thread.start() 
+                            last_exact_counter = exact_read_counter
                             batch_counter += 1
 
                     if not (unmatched_read_counter % leangenes_params["BWA_BATCH_SIZE"]): 
-                        if unmatched_read_counter: 
-                            print("Trigger normal BWA batch") 
+                        if unmatched_read_counter and (unmatched_read_counter != last_unmatch_counter): 
+                            print("Trigger normal BWA batch, unmatched read counter is ", unmatched_read_counter) 
                             
                             batch_id = BatchID()
                             batch_id.num = batch_counter
@@ -205,6 +210,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                             unmatched_socket.close()
                             
                             unmatch_batch = b''
+                            last_unmatch_counter = unmatched_read_counter
                             batch_counter += 1
 
         conn.close()
