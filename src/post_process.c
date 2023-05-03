@@ -66,7 +66,7 @@ void print_sam_line_struct(struct sam_line* line_reader){
 	printf("************************\n");
 }
 
-int main() {
+int main(int argc, char** argv) {
 	//return the iPMT
 	struct pmt_struct* i_pmt = read_pmt(INVERSE);
 	//exit(1);
@@ -77,15 +77,45 @@ int main() {
 		printf("The line reader did not initialize correctly.\n");
 		exit(1);
 	}
-	
-	FILE* fp = fopen(SAM_NAME, "r");
+
+	//We are being given a batch number
+	char sam_name[50];
+	char bytes_name[50];	
+	char processed_name[50];
+
+	if (argc == 2) {
+		printf("Performing sub-batch.\n");	
+		
+		strcpy(sam_name, SAM_NAME);
+		strcat(sam_name, "_");
+		strcat(sam_name, argv[1]);
+
+		strcpy(bytes_name, ENCRYPTED_NAME);
+		strcat(bytes_name, "_");
+		strcat(bytes_name, argv[1]);
+
+		strcpy(processed_name, PROCESSED_NAME);
+		strcat(processed_name, "_");
+		strcat(processed_name, argv[1]);
+	}	
+	else {
+		strcat(sam_name, SAM_NAME);
+		strcat(bytes_name, ENCRYPTED_NAME);
+		strcat(processed_name, PROCESSED_NAME);
+	}
+
+	FILE* fp = fopen(sam_name, "r");
 	if (fp == NULL) {
-		printf("We couldn't find the SAM file.\n");
+		printf("We couldn't find the SAM file: <%s>\n", sam_name);
 		exit(1);
 	}
 
-	FILE* decrypt_fp = fopen(ENCRYPTED_NAME, "rb");
-	FILE* new_sam = fopen(PROCESSED_NAME, "w");
+	FILE* decrypt_fp = fopen(bytes_name, "rb");
+	if (decrypt_fp == NULL) {
+		printf("Couldn't open encrypted bytes file <%s>\n", bytes_name);
+		exit(1);
+	}
+	FILE* new_sam = fopen(processed_name, "w");
 
 	uint8_t key[AES_BLOCK_SIZE];
 	unsigned char data_buf[AES_BLOCK_SIZE + 1];

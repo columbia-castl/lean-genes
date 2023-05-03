@@ -482,8 +482,8 @@ def spawn_results_processes(crypto, savefile):
 
     while True:
 
-        sam_file = open('lg_out_' + str(batches) + ".sam", 'wb')
-        read_file = open('enclave_' + str(batches) + '.bytes', 'wb')
+        sam_file = open('lg_out.sam_' + str(batches), 'wb')
+        read_file = open('enclave.bytes_' + str(batches), 'wb')
     
         batches +=1
 
@@ -551,24 +551,24 @@ def spawn_results_processes(crypto, savefile):
         sam_file.write(result_data)
         write_file_time = time.time()
         print("Data received + written in ", write_file_time - begin_time, " seconds")
-        
         sam_file.close() 
         read_file.close()
+
+        dispatch_post_proc(batch_id.num)
 
         if leangenes_params["disable_exact_matching"]:
             if bwa_set and (batches > last_bwa_batch):
                 print("<results>: Client done accepting results!")
                 result_socket.close() 
-                dispatch_post_proc()
+                os.system("cat stitched.sam_* > lg_out.sam") 
                 break
         else:
             if bwa_set and lg_set:
                 if batches > max(last_bwa_batch, last_lg_batch):
                     print("<results>: Client done accepting results!")
                     result_socket.close() 
-                    dispatch_post_proc()
+                    #os.system("cat stitched.sam_* > lg_out.sam") 
                     break
-
 
 #            pid = os.fork()
 #            if not pid:
@@ -609,9 +609,9 @@ def write_ipmt():
     end_time = time.time()
     print("iPMT generated and written in ", end_time - begin_time, " seconds")
 
-def dispatch_post_proc():
+def dispatch_post_proc(batch_id):
     begin_time = time.time()
-    os.system("./post_process.sh")
+    os.system("./post_proc " + str(batch_id) + " &")
     end_time = time.time()
     print("Post-processor executed in", end_time - begin_time, " seconds")
 
