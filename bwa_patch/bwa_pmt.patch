@@ -51,7 +51,7 @@ index 5480536..0498327 100644
  rope.o: rle.h rope.h
  utils.o: utils.h ksort.h malloc_wrap.h kseq.h
 diff --git a/bwamem.c b/bwamem.c
-index 03e2a05..63a37af 100644
+index 03e2a05..7cf82c7 100644
 --- a/bwamem.c
 +++ b/bwamem.c
 @@ -46,6 +46,8 @@
@@ -63,7 +63,7 @@ index 03e2a05..63a37af 100644
  /* Theory on probability and scoring *ungapped* alignment
   *
   * s'(a,b) = log[P(b|a)/P(b)] = log[4P(b|a)], assuming uniform base distribution
-@@ -872,7 +874,18 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -872,7 +874,19 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  	kputw((p->flag&0xffff) | (p->flag&0x10000? 0x100 : 0), str); kputc('\t', str); // FLAG
  	if (p->rid >= 0) { // with coordinate
  		kputs(bns->anns[p->rid].name, str); kputc('\t', str); // RNAME
@@ -73,7 +73,8 @@ index 03e2a05..63a37af 100644
 +		}
 +		else {
 +			if (p->pos < opt->pmt->pmt_size) {	
-+				kputl(opt->pmt->pmt_table[p->pos] + 1, str); kputc('\t', str); //PMT POS
++				kputl(opt->pmt->pmt_table[p->pos + 1] , str); kputc('\t', str); //PMT POS
++				//printf("Original pos: %ld, permuted pos: %d\n", p->pos, opt->pmt->pmt_table[p->pos]);
 +			}
 +			else {
 +				fprintf(stderr, "BWA-meme error! Wrong PMT loaded.\n");
@@ -83,7 +84,7 @@ index 03e2a05..63a37af 100644
  		kputw(p->mapq, str); kputc('\t', str); // MAPQ
  		add_cigar(opt, p, str, which);
  	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
-@@ -902,8 +915,62 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -902,8 +916,62 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qb += p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qe -= p->cigar[p->n_cigar-1]>>4;
  		}
@@ -125,7 +126,7 @@ index 03e2a05..63a37af 100644
 +						data_buf[j] = '0';
 +					}
 +					else {
-+						data_buf[j] = "ACGTN"[(int)s->seq[(qe-1) - len_scanned]];
++						data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
 +					}
 +					len_scanned++;
 +				}
@@ -148,7 +149,7 @@ index 03e2a05..63a37af 100644
  		kputc('\t', str);
  		if (s->qual) { // printf qual
  			ks_resize(str, str->l + (qe - qb) + 1);
-@@ -916,9 +983,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -916,9 +984,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qe -= p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qb += p->cigar[p->n_cigar-1]>>4;
  		}
