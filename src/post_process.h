@@ -5,7 +5,6 @@
 #include <string.h>
 #include <limits.h>
 
-#define READ_LENGTH 151
 #define AES_BLOCK_SIZE 16
 #define SAM_NAME "lg_out.sam"
 #define ENCRYPTED_NAME "enclave.bytes"
@@ -25,16 +24,16 @@ struct sam_line{
 	char pnext;
 	char tlen;
 	char* seq;
-	char qual[READ_LENGTH+1];	
+	char* qual;	
 };
 
-struct sam_line* init_sam_line_struct();
+struct sam_line* init_sam_line_struct(int read_size);
 void delete_sam_line_struct(struct sam_line* line_reader);
 
 int read_sam_line(struct sam_line* line_reader, FILE* fp);
-char* decrypt_read(struct AES_ctx* ctx_ptr, struct sam_line* line_reader, FILE* decrypt_fp, int encrypted_size);
+char* decrypt_read(struct AES_ctx* ctx_ptr, struct sam_line* line_reader, FILE* decrypt_fp, int encrypted_size, int read_size);
 
-void append_to_sam(struct sam_line* line_reader, FILE* new_sam);
+void append_to_sam(struct sam_line* line_reader, FILE* new_sam, int read_size);
 
 void print_sam_line_struct(struct sam_line* line_reader);
 

@@ -1,13 +1,15 @@
 #include "post_process.h"
 
-struct sam_line* init_sam_line_struct(){
+struct sam_line* init_sam_line_struct(int read_size){
         struct sam_line* line_reader = (struct sam_line*) malloc(sizeof(struct sam_line));
-	line_reader->seq = (char*) malloc(READ_LENGTH + (AES_BLOCK_SIZE - (READ_LENGTH % AES_BLOCK_SIZE))); 
+	line_reader->seq = (char*) malloc(read_size + (AES_BLOCK_SIZE - (read_size % AES_BLOCK_SIZE))); 
+	line_reader->qual = (char*) malloc(read_size + 1);	
 	return line_reader;
 }
 
 void delete_sam_line_struct(struct sam_line* line_reader) {
 	free(line_reader->seq);
+	free(line_reader->qual);
 	free(line_reader);
 }
 
@@ -15,7 +17,7 @@ int read_sam_line(struct sam_line* line_reader, FILE* fp) {
 	return fscanf(fp, "%s\t%d\t%s\t%ld\t%d\t%s\t%c\t%c\t%c\t%s\t%s", line_reader->qname, &line_reader->flag, line_reader->rname, &line_reader->pos, &line_reader->mapq, line_reader->cigar, &line_reader->rnext, &line_reader->pnext, &line_reader->tlen, line_reader->seq, line_reader->qual);
 }
 
-char* decrypt_read(struct AES_ctx* ctx_ptr, struct sam_line* line_reader, FILE* decrypt_fp, int encrypted_size) {
+char* decrypt_read(struct AES_ctx* ctx_ptr, struct sam_line* line_reader, FILE* decrypt_fp, int encrypted_size, int read_size) {
 
 	unsigned char* read_bytes = malloc(encrypted_size + 1);	
 	fread(read_bytes, encrypted_size, 1, decrypt_fp);
@@ -36,13 +38,13 @@ char* decrypt_read(struct AES_ctx* ctx_ptr, struct sam_line* line_reader, FILE* 
 		memcpy(read_bytes + (i*AES_BLOCK_SIZE), byte_block, AES_BLOCK_SIZE);
 	}
 	
-	read_bytes[READ_LENGTH] = 0;
+	read_bytes[read_size] = 0;
 	line_reader->seq = (char*) read_bytes;	
 }
 
-void append_to_sam(struct sam_line* line_reader, FILE* new_sam){
+void append_to_sam(struct sam_line* line_reader, FILE* new_sam, int read_size){
 
-	char next_sam_line[3*READ_LENGTH];
+	char next_sam_line[3*read_size];
 
 	sprintf(next_sam_line, "%s\t%d\t%s\t%ld\t%d\t%s\t%c\t%c\t%c\t%s\t%s\n", line_reader->qname, line_reader->flag, line_reader->rname, line_reader->pos, line_reader->mapq, line_reader->cigar, line_reader->rnext, line_reader->pnext, line_reader->tlen, line_reader->seq, line_reader->qual);
 	
@@ -67,41 +69,45 @@ void print_sam_line_struct(struct sam_line* line_reader){
 }
 
 int main(int argc, char** argv) {
-	//return the iPMT
-	struct pmt_struct* i_pmt = read_pmt(INVERSE);
-	//exit(1);
-
-	//then scan thru the SAM file using the above fcns
-	struct sam_line* line_reader = init_sam_line_struct();
-	if (line_reader == NULL) {
-		printf("The line reader did not initialize correctly.\n");
-		exit(1);
-	}
-
 	//We are being given a batch number
 	char sam_name[50];
 	char bytes_name[50];	
 	char processed_name[50];
 
-	if (argc == 2) {
+	if (argc < 2) {
+		printf("Not enough args to post processor.\n");
+		printf("Usage: ./post_proc <read_size> <optional batch label>\n");
+		exit(1);
+	}
+	
+	int read_size = atoi(argv[1]);
+
+	if (argc > 2) {
 		printf("Performing sub-batch.\n");	
 		
 		strcpy(sam_name, SAM_NAME);
 		strcat(sam_name, "_");
-		strcat(sam_name, argv[1]);
+		strcat(sam_name, argv[2]);
 
 		strcpy(bytes_name, ENCRYPTED_NAME);
 		strcat(bytes_name, "_");
-		strcat(bytes_name, argv[1]);
+		strcat(bytes_name, argv[2]);
 
 		strcpy(processed_name, PROCESSED_NAME);
 		strcat(processed_name, "_");
-		strcat(processed_name, argv[1]);
+		strcat(processed_name, argv[2]);
 	}	
 	else {
 		strcat(sam_name, SAM_NAME);
 		strcat(bytes_name, ENCRYPTED_NAME);
 		strcat(processed_name, PROCESSED_NAME);
+	}
+
+	//then scan thru the SAM file using the above fcns
+	struct sam_line* line_reader = init_sam_line_struct(read_size);
+	if (line_reader == NULL) {
+		printf("The line reader did not initialize correctly.\n");
+		exit(1);
 	}
 
 	FILE* fp = fopen(sam_name, "r");
@@ -116,6 +122,9 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 	FILE* new_sam = fopen(processed_name, "w");
+	
+	//return the iPMT
+	struct pmt_struct* i_pmt = read_pmt(INVERSE);
 
 	uint8_t key[AES_BLOCK_SIZE];
 	unsigned char data_buf[AES_BLOCK_SIZE + 1];
@@ -131,9 +140,9 @@ int main(int argc, char** argv) {
 	int num_vals = 0;
 	int read_counter = 0;
 	
-	int num_blocks = READ_LENGTH / AES_BLOCK_SIZE;
+	int num_blocks = read_size / AES_BLOCK_SIZE;
 
-	if (READ_LENGTH % AES_BLOCK_SIZE) {
+	if (read_size % AES_BLOCK_SIZE) {
 		num_blocks++;
 	}
 	if (DEBUG) printf("NUM BLOCKS: %d\n", num_blocks);
@@ -165,11 +174,11 @@ int main(int argc, char** argv) {
 
 			if (DEBUG) print_sam_line_struct(line_reader);
 			
-			decrypt_read(&ctx, line_reader, decrypt_fp, num_blocks*AES_BLOCK_SIZE);
+			decrypt_read(&ctx, line_reader, decrypt_fp, num_blocks*AES_BLOCK_SIZE, read_size);
 
 			if (DEBUG) print_sam_line_struct(line_reader);
 			
-			append_to_sam(line_reader, new_sam);
+			append_to_sam(line_reader, new_sam, read_size);
 
 			read_counter++;
 

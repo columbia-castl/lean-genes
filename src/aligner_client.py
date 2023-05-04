@@ -611,7 +611,7 @@ def write_ipmt():
 
 def dispatch_post_proc(batch_id):
     begin_time = time.time()
-    os.system("./post_proc " + str(batch_id) + " &")
+    os.system("./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
     end_time = time.time()
     print("Post-processor executed in", end_time - begin_time, " seconds")
 
