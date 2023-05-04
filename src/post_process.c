@@ -174,8 +174,9 @@ int main(int argc, char** argv) {
 
 			if (DEBUG) print_sam_line_struct(line_reader);
 			
-			decrypt_read(&ctx, line_reader, decrypt_fp, num_blocks*AES_BLOCK_SIZE, read_size);
-
+			if (line_reader->flag != 2048) {
+				decrypt_read(&ctx, line_reader, decrypt_fp, num_blocks*AES_BLOCK_SIZE, read_size);
+			}
 			if (DEBUG) print_sam_line_struct(line_reader);
 			
 			append_to_sam(line_reader, new_sam, read_size);

@@ -51,7 +51,7 @@ index 5480536..0498327 100644
  rope.o: rle.h rope.h
  utils.o: utils.h ksort.h malloc_wrap.h kseq.h
 diff --git a/bwamem.c b/bwamem.c
-index 03e2a05..7cf82c7 100644
+index 03e2a05..f303324 100644
 --- a/bwamem.c
 +++ b/bwamem.c
 @@ -46,6 +46,8 @@
@@ -84,7 +84,7 @@ index 03e2a05..7cf82c7 100644
  		kputw(p->mapq, str); kputc('\t', str); // MAPQ
  		add_cigar(opt, p, str, which);
  	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
-@@ -902,8 +916,62 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -902,8 +916,64 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qb += p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qe -= p->cigar[p->n_cigar-1]>>4;
  		}
@@ -120,36 +120,38 @@ index 03e2a05..7cf82c7 100644
 +			//To treat it like a string, add the null terminator	
 +			//data_buf[AES_BLOCK_SIZE] = 0;
 +
-+			for (i = 0; i < num_blocks; i++) {
-+				for (int j = 0; j < AES_BLOCK_SIZE; j++) {
-+					if (len_scanned >= (qe-qb)){
-+						data_buf[j] = '0';
++			if (p->flag != 2048) {
++				for (i = 0; i < num_blocks; i++) {
++					for (int j = 0; j < AES_BLOCK_SIZE; j++) {
++						if (len_scanned >= (qe-qb)){
++							data_buf[j] = '0';
++						}
++						else {
++							data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
++						}
++						len_scanned++;
 +					}
-+					else {
-+						data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
++					//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
++					AES_ECB_encrypt(&ctx, data_buf);
++					//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
++					for (int k = 0; k < AES_BLOCK_SIZE; k++) {
++						//printf("%02X ", data_buf[k]);
++						//str->s[str->l++] = data_buf[k];
 +					}
-+					len_scanned++;
-+				}
-+				//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
-+				AES_ECB_encrypt(&ctx, data_buf);
-+				//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
-+				for (int k = 0; k < AES_BLOCK_SIZE; k++) {
-+					//printf("%02X ", data_buf[k]);
-+					//str->s[str->l++] = data_buf[k];
-+				}
-+				//printf("\n");
-+				fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
++					//printf("\n");
++					fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
 +
-+				//AES_ECB_decrypt(&ctx, data_buf);
-+				//printf("CONFIRM DECRYPT: %s\n", data_buf);
++					//AES_ECB_decrypt(&ctx, data_buf);
++					//printf("CONFIRM DECRYPT: %s\n", data_buf);
++				}
++				//printf("*****\n\n");
 +			}
-+			//printf("*****\n\n");
 +		}
 +	
  		kputc('\t', str);
  		if (s->qual) { // printf qual
  			ks_resize(str, str->l + (qe - qb) + 1);
-@@ -916,9 +984,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -916,9 +986,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qe -= p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qb += p->cigar[p->n_cigar-1]>>4;
  		}

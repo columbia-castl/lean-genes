@@ -39,7 +39,7 @@ def main():
 
             if (b_seq != l_seq):
                 print("Read ", result_count, " BWA SEQ and LG SEQ DO NOT MATCH!")
-                print("\t>> BWA SEQ = ", l_seq, "\t>> BWA SEQ = ", b_seq)
+                print("\t>> BWA SEQ = ", b_seq, "\n\t>>  LG SEQ = ", l_seq)
 
             b_result = b_file.readline()
             l_result = lg_file.readline()
