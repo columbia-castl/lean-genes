@@ -13,21 +13,12 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from google.protobuf.internal.encoder import _VarintBytes
 from google.protobuf.internal.decoder import _DecodeVarint32
-from vsock_handlers import VsockStream
 
 debug = pubcloud_settings["debug"]
 do_pmt_proxy = False
 
 matched_reads = queue.Queue()
 
-def client_handler(args): 
-    client = VsockStream() 
-    endpoint = (args.cid, args.port) 
-    client.connect(endpoint) 
-    msg = 'Hello, world!' 
-    client.send_data(msg.encode()) 
-    client.disconnect() 
- 
 def run_redis_server():
     os.system("redis-server aligner_redis.conf &")
 
@@ -255,13 +246,17 @@ def receive_reads(serialized_read_size, crypto, redis_table):
         unmatched_read_counter = 0
         exact_read_counter = 0
     
-def send_unmatches_to_enclave(unmatches, batch_id):
+def send_unmatches_to_enclave(unmatches, batch_id, cid=0):
 
     print("<unmatch_sender>: --> sending ", unmatches.qsize()  ," non-matches to the enclave")
 
-    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-    
+    if leangenes_params["nitro_enclaves"]:
+        unmatched_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+        unmatched_socket.connect((cid, pubcloud_settings["unmatched_port"]))
+    else: 
+        unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+        
     if debug:
         print("Len of unmatched reads: ", unmatches.qsize())
 
@@ -489,8 +484,13 @@ def main():
 
         #Process to interact with enclave
         else:
-            bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            bwa_socket.bind(('', pubcloud_settings["bwa_port"]))
+            if leangenes_params["nitro_enclaves"]:
+                bwa_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+                bwa_socket.bind((socket.VMADDR_CID_ANY, pubcloud_settings["bwa_port"]))
+            else:
+                bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                bwa_socket.bind(('0.0.0.0', pubcloud_settings["bwa_port"]))
+            
             get_bwa_results(bwa_socket)
             bwa_socket.close()
 

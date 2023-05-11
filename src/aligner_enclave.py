@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import base64
-import matplotlib.pyplot as plt
 import sys
 import time
 import re
@@ -18,7 +17,6 @@ from Crypto.Random import get_random_bytes
 from Crypto.Random import random
 from Crypto.Cipher import AES
 from reads_pb2 import Read, Result, PMT_Entry, BatchID 
-from vsock_handlers import VsockListener
 from google.protobuf.internal.encoder import _VarintBytes
 from google.protobuf.internal.decoder import _DecodeVarint32
 from enum import Enum
@@ -103,7 +101,7 @@ def process_read(protobuffer, read_bytes, crypto):
         print("Read size: " + str(protobuffer.ByteSize()))
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
-def sam_sender(sam_data, batch_id):
+def sam_sender(sam_data, batch_id, cid=0):
 
     if debug: 
         print("\tSAM SENDER RECEIVES: ", sam_data)
@@ -112,8 +110,12 @@ def sam_sender(sam_data, batch_id):
     sam_lines = sam_data.split(b'\n')
     sep_read = b''
 
-    bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
+    if leangenes_params["nitro_enclaves"]:
+        bwa_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+        bwa_socket.connect((cid, enclave_settings["bwa_port"]))
+    else:
+        bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))
 
     header_len = 3
     if len(sam_lines) >= header_len:
@@ -476,7 +478,7 @@ def main():
     print("Generate PMT permutation")
     #pmt = gen_permutation(ref_length, read_length)
     pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(ref_length)
-    
+
     if debug:    
         print(pmt)
         print("... PMT is generated!")
@@ -535,8 +537,12 @@ def main():
 
     if not enclave_settings["only_indexing"]:
         #Run server for receiving encrypted reads
-        unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        unmatched_socket.bind(('', unmatched_port)) 
+        if leangenes_params["nitro_enclaves"]:
+            unmatched_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+            unmatched_socket.bind((socket.VMADDR_CID_ANY, unmatched_port)) 
+        else:
+            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            unmatched_socket.bind(('', unmatched_port)) 
         get_encrypted_reads(unmatched_socket, serialized_read_size, fasta)
 
 if __name__ == "__main__":

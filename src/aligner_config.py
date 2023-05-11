@@ -12,12 +12,12 @@ client_settings = dict(
     read_port = 4444,
     result_port = 4446,
     debug = False,
-    write_ipmt = True,
+    write_ipmt = False,
     #results_threads = 11
 )
 
 pubcloud_settings = dict(
-    enclave_ip = '127.0.0.1',
+    enclave_ip = '0.0.0.0',
     client_ip = '127.0.0.1',
     read_port = 4444,
     pmt_client_port = 4445,
@@ -29,7 +29,7 @@ pubcloud_settings = dict(
 )
 
 enclave_settings = dict(
-    server_ip = '127.0.0.1',
+    server_ip = '0.0.0.0',
     vsock_port = 5006,
     #If this path isn't empty (i.e. BWA is on PATH), make sure it ends with /"
     bwa_path = "../bwa/",
@@ -49,12 +49,13 @@ secret_settings = dict(
 )
 
 leangenes_params = dict(
-    BWA_BATCH_SIZE = 10000, #Length of FASTQs created by enclave
+    BWA_BATCH_SIZE = 100000, #Length of FASTQs created by enclave
     LG_BATCH_SIZE = 10000, #Serialized exact match batches 
     READ_BATCH_SIZE = 10000, #How many reads client sends at once
     AES_BLOCK_SIZE = 16,
     CRYPTO_MODE = "debug",
     disable_exact_matching = True,
+    nitro_enclaves = False
 )
 
 #CHR21 parameters 
