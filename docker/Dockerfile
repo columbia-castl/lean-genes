@@ -12,14 +12,16 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install pycryptodome redis numpy google protobuf
 
-#Code copy
+#Aligner code copy
 COPY aligner_enclave.py bin/aligner_enclave.py
 COPY aligner_config.py bin/aligner_config.py
 COPY reads_pb2.py bin/reads_pb2.py
+
+#BWA copy
 COPY bwa bwa/bwa
+COPY pmt.csv pmt.csv
 
 #Data copy
-COPY chr21.fa test_data/ref.fa
-
-CMD bwa/bwa index ref.fa
-CMD python3 bin/aligner_enclave.py ref.fa
+COPY chr21.fa data/ref.fa
+#COPY small-150.fastq data/small-150.fastq
+CMD bwa/bwa index data/ref.fa && python3 bin/aligner_enclave.py data/ref.fa

@@ -57,7 +57,7 @@ def pmt_proxy(proxy_port, pmt_client_port):
     pmt_client_socket.close()
     return proxy_socket
 
-def receive_reads(serialized_read_size, crypto, redis_table):
+def receive_reads(serialized_read_size, crypto, redis_table, cid=16):
     
     print("CLIENT THREAD STARTED")
 
@@ -117,10 +117,14 @@ def receive_reads(serialized_read_size, crypto, redis_table):
                 
                 if debug: 
                     print("Passing batch for enclave [no matching check performed].")
-                
-                unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
-                             
+               
+                if leangenes_params["nitro_enclaves"]:
+                    unmatched_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+                    unmatched_socket.connect((cid, pubcloud_settings["unmatched_port"]))
+                else:
+                    unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+                                 
                 batch_id = BatchID()
                 batch_id.num = batch_counter
                 batch_id.type = 0
@@ -218,9 +222,13 @@ def receive_reads(serialized_read_size, crypto, redis_table):
             batch_id = BatchID()
             batch_id.num = batch_counter
             batch_id.type = 1
-
-            unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
+            
+            if leangenes_params["nitro_enclaves"]:
+                unmatched_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+                unmatched_socket.connect((cid, pubcloud_settings["unmatched_port"]))
+            else:
+                unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
                          
             unmatched_socket.send(_VarintBytes(batch_id.ByteSize()))
             unmatched_socket.send(batch_id.SerializeToString())
@@ -246,7 +254,7 @@ def receive_reads(serialized_read_size, crypto, redis_table):
         unmatched_read_counter = 0
         exact_read_counter = 0
     
-def send_unmatches_to_enclave(unmatches, batch_id, cid=0):
+def send_unmatches_to_enclave(unmatches, batch_id, cid=16):
 
     print("<unmatch_sender>: --> sending ", unmatches.qsize()  ," non-matches to the enclave")
 
@@ -459,15 +467,15 @@ def main():
     else:
         proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     
-    run_redis_server()
-
-    redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
-
     if leangenes_params["disable_exact_matching"]:
         print("**************************************************************")
         print("You have disabled the LEAN-GENES exact matching functionality!")
         print("**************************************************************")
-    
+        redis_table = []
+    else:
+        run_redis_server()
+        redis_table = redis.Redis(host=global_settings["redis_ip"], port=redis_port, db=0, password='lean-genes-17')
+
     if not pubcloud_settings["only_indexing"]:
         print("\n")
         print("~~~ PUBLIC CLOUD IS READY TO RECEIVE READS! ~~~")

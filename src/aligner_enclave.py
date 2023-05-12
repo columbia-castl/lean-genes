@@ -101,7 +101,7 @@ def process_read(protobuffer, read_bytes, crypto):
         print("Read size: " + str(protobuffer.ByteSize()))
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
-def sam_sender(sam_data, batch_id, cid=0):
+def sam_sender(sam_data, batch_id):
 
     if debug: 
         print("\tSAM SENDER RECEIVES: ", sam_data)
@@ -111,8 +111,9 @@ def sam_sender(sam_data, batch_id, cid=0):
     sep_read = b''
 
     if leangenes_params["nitro_enclaves"]:
+        NITRO_CID = 3 #This is badly documented but found it in example repo!
         bwa_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
-        bwa_socket.connect((cid, enclave_settings["bwa_port"]))
+        bwa_socket.connect((NITRO_CID, enclave_settings["bwa_port"]))
     else:
         bwa_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         bwa_socket.connect((enclave_settings["server_ip"], enclave_settings["bwa_port"]))

@@ -7,10 +7,12 @@ cp ../src/reads_pb2.py .
 
 # COPY BWA-MEMe
 cp ../bwa/bwa .
+cp ../bwa/pmt.csv .
 
 # COPY REFERENCE TO DOCKER CONTAINER
 #python3 ../src/helper_scripts/ref_gen.py 100 small_ref 1
 cp ../test_data/chr21.fa .
+cp ../test_data/small-150.fastq .
 
 docker build -t lean_genes:v1 .
 #docker run lean_genes:v1
