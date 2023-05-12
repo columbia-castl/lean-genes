@@ -29,7 +29,7 @@ server-type component that receives not exactly-matched reads from the public cl
 If you want to use a pre-existing copy of BWA with `lean-genes`, ensure that the configuration file points to where your BWA copy is installed, unless it is on the system PATH, in which case you could indicate this with the empty string. Otherwise, the `install_dependencies.sh` includes installation of BWA as a subtask of its functionality.
 
 ###### BWA-MEMe
-`lean-genes` makes use of an extension to BWA that encrypts output sequences with AES and conceals its output positions using a secure permutation so that new cloud technologies allow the full read-mapping task to take place in the cloud. To make use of this, `lean-genes` applies a patch to BWA that is stored in the `bwa_patch` folder. You can take care of this process automatically by running `install_dependencies.sh`.
+`lean-genes` makes use of an extension to BWA that we call `BWA-MEMe`. `BWA-MEMe` encrypts output sequences with AES and conceals its output positions using a secure permutation so that new cloud technologies allow the full read-mapping task to take place in the cloud. To make use of this, `lean-genes` applies a patch to BWA that is stored in the `bwa_patch` folder. You can take care of this process automatically by running `install_dependencies.sh`.
 
 ###### Running the enclave on its own machine
 To run `aligner_enclave.py`, simply enter this command into the terminal
