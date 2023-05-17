@@ -4,6 +4,7 @@ import sys
 import re
 import socket
 import os
+import subprocess
 import time
 import array
 import threading
@@ -482,9 +483,6 @@ def spawn_results_processes(crypto, savefile):
 
     while True:
 
-        sam_file = open('lg_out.sam_' + str(batches), 'wb')
-        read_file = open('enclave.bytes_' + str(batches), 'wb')
-    
         batches +=1
 
         print("<results>: Wait to accept another process")
@@ -518,6 +516,10 @@ def spawn_results_processes(crypto, savefile):
         print("Batch #", batch_id.num)
         print("Batch ID Type: ", batch_id.type)
         print("|Encrypted Bytes|: ", len(batch_id.encrypted_seqs))
+
+        sam_file = open('lg_out.sam_' + str(batch_id.num), 'wb')
+        read_file = open('enclave.bytes_' + str(batch_id.num), 'wb')
+
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
             last_bwa_batch = batch_id.num
@@ -554,7 +556,8 @@ def spawn_results_processes(crypto, savefile):
         sam_file.close() 
         read_file.close()
 
-        dispatch_post_proc(batch_id.num)
+        if len(batch_id.encrypted_seqs):
+            dispatch_post_proc(batch_id.num)
 
         if leangenes_params["disable_exact_matching"]:
             if bwa_set and (batches > last_bwa_batch):
@@ -610,10 +613,8 @@ def write_ipmt():
     print("iPMT generated and written in ", end_time - begin_time, " seconds")
 
 def dispatch_post_proc(batch_id):
-    begin_time = time.time()
-    os.system("./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
-    end_time = time.time()
-    print("Post-processor executed in", end_time - begin_time, " seconds")
+    #os.system("time ./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
+    subprocess.Popen(["time", "./post_proc", str(genome_params["READ_LENGTH"]), str(batch_id)], close_fds=True)
 
 def main():
     global result_socket, pmt

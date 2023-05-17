@@ -451,7 +451,10 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
         print("FASTQ len: ", len(fastq_bytes))
 
     begin_time = time.time()
-    returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes, batch_id)
+    if len(fastq_bytes):
+        returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes, batch_id)
+    else:
+        returned_sam = b''
     end_time = time.time()
     print("BWA-meme runs in ", end_time - begin_time, " seconds")
 
