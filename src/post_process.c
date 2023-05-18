@@ -52,80 +52,28 @@ void append_to_sam(struct sam_line* line_reader, FILE* new_sam, int read_size){
 
 }
 
-void print_sam_line_struct(struct sam_line* line_reader){
-	printf("************************\n");
-	printf("<qname>: %s\n", line_reader->qname);
-	printf("<flag>: %d\n", line_reader->flag);
-	printf("<rname>: %s\n", line_reader->rname);
-	printf("<pos>: %ld\n", line_reader->pos);
-	printf("<mapq>: %d\n", line_reader->mapq);
-	printf("<cigar>: %s\n", line_reader->cigar);
-	printf("<rnext>: %c\n", line_reader->rnext);
-	printf("<pnext>: %c\n", line_reader->pnext);
-	printf("<tlen>: %c\n", line_reader->tlen);
-	printf("<seq>: %s\n", line_reader->seq);
-	printf("<qual>: %s\n", line_reader->qual);
-	printf("************************\n");
-}
-
-int main(int argc, char** argv) {
-	//We are being given a batch number
-	char sam_name[50];
-	char bytes_name[50];	
-	char processed_name[50];
-
-	if (argc < 2) {
-		printf("Not enough args to post processor.\n");
-		printf("Usage: ./post_proc <read_size> <optional batch label>\n");
-		exit(1);
-	}
+int run_batch(struct file_names* files, int read_size) {
 	
-	int read_size = atoi(argv[1]);
-
-	if (argc > 2) {
-		printf("Performing sub-batch.\n");	
-		
-		strcpy(sam_name, SAM_NAME);
-		strcat(sam_name, "_");
-		strcat(sam_name, argv[2]);
-
-		strcpy(bytes_name, ENCRYPTED_NAME);
-		strcat(bytes_name, "_");
-		strcat(bytes_name, argv[2]);
-
-		strcpy(processed_name, PROCESSED_NAME);
-		strcat(processed_name, "_");
-		strcat(processed_name, argv[2]);
-	}	
-	else {
-		strcat(sam_name, SAM_NAME);
-		strcat(bytes_name, ENCRYPTED_NAME);
-		strcat(processed_name, PROCESSED_NAME);
-	}
-
-	//then scan thru the SAM file using the above fcns
+	//scan thru the SAM file using the above fcns
 	struct sam_line* line_reader = init_sam_line_struct(read_size);
 	if (line_reader == NULL) {
 		printf("The line reader did not initialize correctly.\n");
-		exit(1);
+		return -1;
 	}
-
-	FILE* fp = fopen(sam_name, "r");
-	if (fp == NULL) {
-		printf("We couldn't find the SAM file: <%s>\n", sam_name);
-		exit(1);
-	}
-
-	FILE* decrypt_fp = fopen(bytes_name, "rb");
-	if (decrypt_fp == NULL) {
-		printf("Couldn't open encrypted bytes file <%s>\n", bytes_name);
-		exit(1);
-	}
-	FILE* new_sam = fopen(processed_name, "w");
 	
-	//return the iPMT
-	struct pmt_struct* i_pmt = read_pmt(INVERSE);
+	FILE* fp = fopen(files->sam_name, "r");
+	if (fp == NULL) {
+		printf("We couldn't find the SAM file: <%s>\n", files->sam_name);
+		return -1;
+	}
 
+	FILE* decrypt_fp = fopen(files->bytes_name, "rb");
+	if (decrypt_fp == NULL) {
+		printf("Couldn't open encrypted bytes file <%s>\n", files->bytes_name);
+		return -1;
+	}
+	FILE* new_sam = fopen(files->processed_name, "w");
+	
 	uint8_t key[AES_BLOCK_SIZE];
 	unsigned char data_buf[AES_BLOCK_SIZE + 1];
 	struct AES_ctx ctx;
@@ -193,6 +141,133 @@ int main(int argc, char** argv) {
 	fclose(fp);
 	fclose(decrypt_fp);
 	fclose(new_sam);
+
+	return 0;
+
+}
+
+struct file_names* init_file_names(struct file_names* files){
+	
+	if (files == NULL) {
+		files = (struct file_names*) malloc(sizeof(struct file_names));
+	}
+	
+	strcpy(files->sam_name, SAM_NAME);
+	strcpy(files->bytes_name, ENCRYPTED_NAME);
+	strcpy(files->processed_name, PROCESSED_NAME);
+
+	return files;
+}
+
+void make_batch_file_names(struct file_names* files, char* batch_num){
+	strcat(files->sam_name, "_");
+	strcat(files->sam_name, batch_num);
+
+	strcat(files->bytes_name, "_");
+	strcat(files->bytes_name, batch_num);
+
+	strcat(files->processed_name, "_");
+	strcat(files->processed_name, batch_num);
+}
+
+void check_file_names(struct file_names* files){
+	printf("SAM filename: %s\n", files->sam_name);
+	printf("enc bytes filename: %s\n", files->bytes_name);
+	printf("Results filename: %s\n", files->processed_name);
+}
+
+void print_help() {
+	printf("Not enough args to post processor.\n");
+	printf("Usage: ./post_proc <options>\n");
+	printf("OPTIONS:\n");
+	printf("\t-i --> run post-processor interactively\n");
+	printf("\t-r <read size> --> size of reads post proc will process [MANDATORY]\n");
+	printf("\t-l <label num> --> if provided, search for a batch\n\n");
+	exit(1);
+}
+
+void print_sam_line_struct(struct sam_line* line_reader){
+	printf("************************\n");
+	printf("<qname>: %s\n", line_reader->qname);
+	printf("<flag>: %d\n", line_reader->flag);
+	printf("<rname>: %s\n", line_reader->rname);
+	printf("<pos>: %ld\n", line_reader->pos);
+	printf("<mapq>: %d\n", line_reader->mapq);
+	printf("<cigar>: %s\n", line_reader->cigar);
+	printf("<rnext>: %c\n", line_reader->rnext);
+	printf("<pnext>: %c\n", line_reader->pnext);
+	printf("<tlen>: %c\n", line_reader->tlen);
+	printf("<seq>: %s\n", line_reader->seq);
+	printf("<qual>: %s\n", line_reader->qual);
+	printf("************************\n");
+}
+
+int main(int argc, char** argv) {
+	//We are being given a batch number
+	char sam_name[50];
+	char bytes_name[50];	
+	char processed_name[50];
+
+	int interactive = 0;
+	int subbatch = 0;
+	char* batch_num;
+	int read_size = 0;
+
+	if (argc < 2) print_help(); 
+	
+	int c;
+	while ((c = getopt(argc, argv, "ir:l:")) != -1) {
+		switch(c)
+			{
+			case 'i':
+				interactive = 1;
+				break;
+			case 'r':
+				read_size = atoi(optarg);
+				break;
+			case 'l':
+				subbatch = 1;
+				batch_num = optarg;
+				break;
+			}
+	}
+
+	if (!read_size) {
+		printf("The -r <read_size> option is MANDATORY!\n");
+		print_help();
+	}
+
+	if (interactive && subbatch) {
+		printf("!!! CANNOT run post-processor interactively and give sub-batch!\n");
+		print_help();
+	}
+
+	struct file_names* files = init_file_names(NULL);
+	if (subbatch) {
+		printf("Performing sub-batch.\n");	
+		make_batch_file_names(files, batch_num);		
+	}
+
+	i_pmt = read_pmt(INVERSE);
+
+	if (interactive) {
+		while (1) {
+			printf("Wait to process batch.\n");
+			char batch_num[10];
+			scanf("%s", batch_num);
+			
+			if (!strcmp(batch_num, "quit")) {
+				break;
+			}
+			
+			init_file_names(files);
+			make_batch_file_names(files, batch_num);
+			run_batch(files, read_size);
+		}	
+	}
+	else {
+		run_batch(files, read_size);
+	}	
 
 	return 0;
 }
