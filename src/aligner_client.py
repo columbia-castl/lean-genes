@@ -121,6 +121,7 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
                 while len(get_line_bytes) % leangenes_params["AES_BLOCK_SIZE"] != 0:
                     get_line_bytes += b'0'
                 newread.read = encrypter.encrypt(get_line_bytes)
+                print(newread.read) 
                 newread.hash = curr_hash
                 
                 PARSING_STATE = FastqState.DIV
@@ -216,6 +217,24 @@ def send_read_wrapper(filename):
     print("*************************")
     read_sender = threading.Thread(target=send_reads, args=(crypto, hashkey, filename,))
     read_sender.start()
+
+def decrypt_exact_matches(batch_num):
+    if leangenes_params["CRYPTO_MODE"] == "debug":
+        cipherkey = b'0' * 32
+    else:
+        cipherkey = get_random_bytes(32)
+
+    decrypto = AES.new(cipherkey, AES.MODE_ECB)
+
+    read_length = genome_params["READ_LENGTH"] + (leangenes_params["AES_BLOCK_SIZE"] - (genome_params["READ_LENGTH"] % leangenes_params["AES_BLOCK_SIZE"]))
+
+    exma_file = open('enclave.bytes_' + str(batch_num), 'rb')
+    while True:
+        read = exma_file.read(read_length)
+        if read: 
+            print(decrypto.decrypt(read))
+        else:
+            break
 
 def unpack_read(next_result, crypto):
     global pmt
@@ -556,7 +575,9 @@ def spawn_results_processes(crypto, savefile):
         sam_file.close() 
         read_file.close()
 
-        if len(batch_id.encrypted_seqs):
+        if (batch_id.type == 2):
+            decrypt_exact_matches(batch_id.num)
+        elif len(batch_id.encrypted_seqs):
             dispatch_post_proc(batch_id.num)
 
         if leangenes_params["disable_exact_matching"]:
@@ -614,7 +635,7 @@ def write_ipmt():
 
 def dispatch_post_proc(batch_id):
     #os.system("time ./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
-    subprocess.Popen(["time", "./post_proc", str(genome_params["READ_LENGTH"]), str(batch_id)], close_fds=True)
+    subprocess.Popen(["time", "./post_proc", "-r" , str(genome_params["READ_LENGTH"]), "-l" ,str(batch_id)], close_fds=True)
 
 def main():
     global result_socket, pmt
