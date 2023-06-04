@@ -314,6 +314,8 @@ def make_exact_batch_string(match_queue, batch_id):
         read, read_found = match_queue.get()
         read_parser.ParseFromString(read)
         match_batch += make_exact_read_bytestring(bytes(read_parser.align_score, 'utf-8'), read_found)
+        if debug: 
+            print(read_parser.read) 
         batch_id.encrypted_seqs += read_parser.read
         num_processed += 1
     print(num_processed, " results have been processed")

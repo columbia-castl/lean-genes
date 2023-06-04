@@ -22,6 +22,7 @@ from multiprocessing import pool
 debug = client_settings["debug"]
 result_socket = ""
 pmt = []
+ipmt = []
 
 class FastqState(Enum):
     READ_LABEL = 1
@@ -121,7 +122,8 @@ def send_reads(encrypter, hashkey, filename="../test_data/samples.fq"):
                 while len(get_line_bytes) % leangenes_params["AES_BLOCK_SIZE"] != 0:
                     get_line_bytes += b'0'
                 newread.read = encrypter.encrypt(get_line_bytes)
-                print(newread.read) 
+                if debug: 
+                    print(newread.read) 
                 newread.hash = curr_hash
                 
                 PARSING_STATE = FastqState.DIV
@@ -218,7 +220,9 @@ def send_read_wrapper(filename):
     read_sender = threading.Thread(target=send_reads, args=(crypto, hashkey, filename,))
     read_sender.start()
 
-def decrypt_exact_matches(batch_num):
+def decrypt_exact_batch(batch_num):
+    global ipmt 
+
     if leangenes_params["CRYPTO_MODE"] == "debug":
         cipherkey = b'0' * 32
     else:
@@ -229,12 +233,41 @@ def decrypt_exact_matches(batch_num):
     read_length = genome_params["READ_LENGTH"] + (leangenes_params["AES_BLOCK_SIZE"] - (genome_params["READ_LENGTH"] % leangenes_params["AES_BLOCK_SIZE"]))
 
     exma_file = open('enclave.bytes_' + str(batch_num), 'rb')
+    sam_file = open('lg_out.sam_' + str(batch_num), 'r')
+    stitch_file = open('stitched.sam_' + str(batch_num), 'w')
+   
+    #Prepare SAM
+    reading_header = True
+    sam_line = "" 
+    while reading_header:
+        sam_line = sam_file.readline()
+        if sam_line[0] != '@':
+            reading_header = False
+        else:
+            stitch_file.write(sam_line)
+        
+    read_counter = 0
     while True:
         read = exma_file.read(read_length)
         if read: 
-            print(decrypto.decrypt(read))
+            seq = decrypto.decrypt(read)
+            if debug: 
+                print(seq)
+            read_counter += 1
         else:
             break
+        read_elements = sam_line.split('\t')
+        if debug: 
+            print(read_elements) 
+        read_elements[3] = ipmt[int(read_elements[3])]
+        read_elements[9] = str(seq[:read_length], 'utf-8') 
+        stitch_file.write("\t".join([str(field) for field in read_elements]))
+        sam_line = sam_file.readline()
+
+    print(read_counter, " reads in exact batch")
+    stitch_file.close()
+    sam_file.close()
+    exma_file.close()
 
 def unpack_read(next_result, crypto):
     global pmt
@@ -576,7 +609,7 @@ def spawn_results_processes(crypto, savefile):
         read_file.close()
 
         if (batch_id.type == 2):
-            decrypt_exact_matches(batch_id.num)
+            decrypt_exact_batch(batch_id.num)
         elif len(batch_id.encrypted_seqs):
             dispatch_post_proc(batch_id.num)
 
@@ -613,32 +646,44 @@ def spawn_results_processes(crypto, savefile):
 #       else:
 #           processes.remove(pid)
 
-def write_ipmt():
+def make_ipmt(write=True):
     global pmt
 
     begin_time = time.time()
 
-    ipmt = [0 for i in range(len(pmt))]
-    for i in range(len(pmt)):
-        ipmt[pmt[i]] = i
+#   Slow permutation inversion
+#   ipmt = [0 for i in range(len(pmt))]
+#   for i in range(len(pmt)):
+#       ipmt[pmt[i]] = i
 
-    print("Write iPMT to file....")
-    ipmt_file = open('ipmt.csv','w')
-    ipmt_file.write(str(len(ipmt)) + ":")
-    for entry in ipmt[:-1]:
-        ipmt_file.write(str(entry) + ",")
-    ipmt_file.write(str(ipmt[-1]) + "\n")
-    ipmt_file.close()
+#   Much faster permutation inversion [Thanks Stack Overflow!]
+    ipmt = np.empty_like(pmt)
+    ipmt[pmt] = np.arange(pmt.size)
 
     end_time = time.time()
-    print("iPMT generated and written in ", end_time - begin_time, " seconds")
+    print("iPMT generated in ", end_time - begin_time, " seconds")
+
+    if write:
+        begin_time = time.time()
+        print("Write iPMT to file....")
+        ipmt_file = open('ipmt.csv','w')
+        ipmt_file.write(str(len(ipmt)) + ":")
+        for entry in ipmt[:-1]:
+            ipmt_file.write(str(entry) + ",")
+        ipmt_file.write(str(ipmt[-1]) + "\n")
+        ipmt_file.close()
+        
+        end_time = time.time()
+        print("iPMT written in ", end_time - begin_time, " seconds")
+    
+    return ipmt
 
 def dispatch_post_proc(batch_id):
     #os.system("time ./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
     subprocess.Popen(["time", "./post_proc", "-r" , str(genome_params["READ_LENGTH"]), "-l" ,str(batch_id)], close_fds=True)
 
 def main():
-    global result_socket, pmt
+    global result_socket, pmt, ipmt
 
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', client_settings["result_port"]))
@@ -651,9 +696,9 @@ def main():
     if debug:
         print("PMT")
         print(pmt)
-
+    
+    ipmt = make_ipmt(client_settings["write_ipmt"])
     if client_settings["write_ipmt"]:
-        write_ipmt()
         exit()
 
     print("Client initialized")
