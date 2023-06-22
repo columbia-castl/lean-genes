@@ -13,6 +13,7 @@ client_settings = dict(
     result_port = 4446,
     debug = False,
     write_ipmt = False,
+    interactive_post_proc = True
     #results_threads = 11
 )
 

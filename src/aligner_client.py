@@ -9,6 +9,7 @@ import time
 import array
 import threading
 import numpy as np
+import signal
 
 from aligner_config import global_settings, client_settings, genome_params, leangenes_params, secret_settings
 from Crypto.Random import get_random_bytes
@@ -204,20 +205,25 @@ def send_read_wrapper(filename):
     else:
         hashkey = get_random_bytes(32)
         cipherkey = get_random_bytes(32)
-   
+  
+    if client_settings["interactive_post_proc"]:
+        post_proc = subprocess.Popen(["time", "./post_proc", "-r", str(genome_params["READ_LENGTH"]), "-i"], close_fds=True, stdin=subprocess.PIPE)
+    else:
+        post_proc = None
+
     #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
     print("*********************************")
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
     #result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
-    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam")) 
+    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam", post_proc)) 
     result_manager.start()
 
     print("*************************")
     print("* READ SENDER INITIATED *")
     print("*************************")
-    read_sender = threading.Thread(target=send_reads, args=(crypto, hashkey, filename,))
+    read_sender = threading.Thread(target=send_reads, args=(crypto, hashkey, filename))
     read_sender.start()
 
 def decrypt_exact_batch(batch_num):
@@ -520,7 +526,7 @@ def track_reads_received(crypto, savefile):
     result_pool.close()
     print("Result threads pool shut down successfully")
 
-def spawn_results_processes(crypto, savefile):
+def spawn_results_processes(crypto, savefile, post_proc):
     global result_socket, done_with_bwa, done_with_exact
     result_socket.listen()
 
@@ -611,12 +617,22 @@ def spawn_results_processes(crypto, savefile):
         if (batch_id.type == 2):
             decrypt_exact_batch(batch_id.num)
         elif len(batch_id.encrypted_seqs):
-            dispatch_post_proc(batch_id.num)
+            if client_settings["interactive_post_proc"]:
+                print("post_proc:", post_proc) 
+                print(bytes(str(batch_id.num) + "\n", 'ascii')) 
+                post_proc.stdin.write(bytes(str(batch_id.num) + "\n", 'ascii'))
+                #print(post_proc.stdout.readlines())
+            else: 
+                dispatch_post_proc(batch_id.num)
 
         if leangenes_params["disable_exact_matching"]:
             if bwa_set and (batches > last_bwa_batch):
                 print("<results>: Client done accepting results!")
-                result_socket.close() 
+                result_socket.close()
+                if client_settings["interactive_post_proc"]:
+                    print("SEND POST_PROC KILL!")
+                    #post_proc.send_signal(signal.SIGTERM)
+                    post_proc.stdin.write(bytes("quit\n", 'ascii')) 
                 os.system("cat stitched.sam_* > lg_out.sam") 
                 break
         else:
@@ -624,6 +640,9 @@ def spawn_results_processes(crypto, savefile):
                 if batches > max(last_bwa_batch, last_lg_batch):
                     print("<results>: Client done accepting results!")
                     result_socket.close() 
+                    if client_settings["interactive_post_proc"]: 
+                        post_proc.send_signal(signal.SIGTERM)
+                        print("SEND POST_PROC KILL!")
                     #os.system("cat stitched.sam_* > lg_out.sam") 
                     break
 
