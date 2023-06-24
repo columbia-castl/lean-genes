@@ -13,7 +13,7 @@ client_settings = dict(
     result_port = 4446,
     debug = False,
     write_ipmt = False,
-    interactive_post_proc = True
+    interactive_post_proc = False
     #results_threads = 11
 )
 
@@ -40,6 +40,7 @@ enclave_settings = dict(
     only_indexing = False,
     write_pmt = False,
     enable_bwa_pmt = True,
+    interactive_bwa = False,
     hashing_progress_indicator = 1000000,
     debug = False
 )
