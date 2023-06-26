@@ -251,7 +251,7 @@ index 0a0e3bb..fd09605 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..ca885d2 100644
+index be7ba0e..25905a5 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,7 @@ int main_mem(int argc, char *argv[])
@@ -278,11 +278,11 @@ index be7ba0e..ca885d2 100644
 +		else if (c == 'i') is_interactive = 1;
 +		else if (c == 'e') {
 +			opt->pmt = read_pmt(DEFAULT);
-+			int has_batch_id = 1;
++			int has_batch_id = 0;
 +
-+			if (strcmp(optarg, "N")) {
++			if (strcmp(optarg, "N") != 0) {
 +				opt->batch_id = atoi(optarg);
-+				has_batch_id = 0;
++				has_batch_id = 1;
 +			}
 +
 +			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
