@@ -10,6 +10,7 @@ import time
 import os
 import numpy as np
 import threading
+import pexpect
 
 from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params, secret_settings
 from subprocess import Popen, PIPE, STDOUT
@@ -36,6 +37,10 @@ line_limit = 100
 progress_indicator = enclave_settings["hashing_progress_indicator"]
 pmt = []
 
+call_bwa = ""
+bwa_running = False
+open_bwa = True
+
 class SamState(Enum):
     PROCESSING_HEADER = 1
     PROCESSING_READS = 2
@@ -46,7 +51,8 @@ def trigger_bwa_indexing(bwa_path, fasta):
     os.system(bwa_path + "bwa index " + fasta + " &")
 
 def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
-    
+    global call_bwa, bwa_running, open_bwa
+
     if debug:
         print("Passing batched FASTQ to BWA...")
         print(len(fastq), " is len of fastq")
@@ -54,17 +60,42 @@ def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
     if debug_subprocess: 
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
-        if enclave_settings["enable_bwa_pmt"]:
-            call_bwa = Popen([bwa_path + "bwa", "mem","-e", str(batch_id.num), fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        if enclave_settings["interactive_bwa"]:
+
+            if enclave_settings["enable_bwa_pmt"] and (not bwa_running):
+                cmd =  [bwa_path + "bwa", "mem", "-i" ,fasta , "-", "2>/dev/null/"]
+                cmd_str = bwa_path + "bwa " + "mem -i " + fasta + " x"
+                bash_cmd_str = "/bin/bash -c " + cmd_str + " -- 2>/dev/null"
+                #call_bwa = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                call_bwa = pexpect.spawn(cmd_str, echo=False) 
+                bwa_running = True
+            elif not bwa_running:
+                call_bwa = Popen([bwa_path + "bwa", "mem","-i", fasta, fastq_name ], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+                bwa_running = True
+            
+            fq = open(str(batch_id.num), "wb")
+            fq.write(fastq)
+            fq.close()
+           
+            call_bwa.sendline(str(batch_id.num))
+            call_bwa.expect("BATCH FINISH")
+            stdout_data = call_bwa.before
+            if debug: 
+                print(stdout_data)
+
         else:
-            call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-    stdout_data = call_bwa.communicate(input=fastq)[0]
+            if enclave_settings["enable_bwa_pmt"]:
+                call_bwa = Popen([bwa_path + "bwa", "mem","-e", str(batch_id.num), fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            else:
+                call_bwa = Popen([bwa_path + "bwa", "mem", fasta, "-"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            
+            stdout_data = call_bwa.communicate(input=fastq)[0]
 
     if debug:
         print(str(stdout_data, 'utf-8'))
         print(type(stdout_data))
         print("SAM length: ", len(stdout_data))
-    
+        
     print(" ~~~ BWA HAS PROCESSED UNMATCHED READS! ~~~ ")
     return stdout_data
 

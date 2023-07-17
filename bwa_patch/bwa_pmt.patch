@@ -251,7 +251,7 @@ index 0a0e3bb..fd09605 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..25905a5 100644
+index be7ba0e..149bf7d 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,7 @@ int main_mem(int argc, char *argv[])
@@ -312,7 +312,7 @@ index be7ba0e..25905a5 100644
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -367,41 +395,56 @@ int main_mem(int argc, char *argv[])
+@@ -367,41 +395,79 @@ int main_mem(int argc, char *argv[])
  	if (ignore_alt)
  		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
  			aux.idx->bns->anns[i].is_alt = 0;
@@ -334,16 +334,36 @@ index be7ba0e..25905a5 100644
 -			if (ko2 == 0) {
 -				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
 -				return 1;
-+	int after_first_iter = 0;	
++	int iter_count = 0;	
 +	//INTERACTIVE
-+	do {
-+		if (after_first_iter) {
-+			ko = kopen("-", &fd);
-+		}	
++	while (1){
++		char batchfile[64];
 +		
++		if (iter_count) {
++			printf("BATCH FINISH\n");
++		}
++		if (is_interactive) {
++			scanf("%s", batchfile);
++
++			if (!strcmp(batchfile, "quit")){
++				break;
+ 			}
+-			fp2 = gzdopen(fd2, "r");
+-			aux.ks2 = kseq_init(fp2);
+-			opt->flag |= MEM_F_PE;
++
++			ko = kopen(batchfile, &fd);
+ 		}
++		else {
++			memcpy(batchfile, argv[optind+1], 64);
++		}
++
 +		if (ko == 0) {
-+			if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
++			if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, batchfile);
 +			return 1;
++		}
++		else {
++			//printf("GET BATCHFILE: %s\n", batchfile);
 +		}
 +		fp = gzdopen(fd, "r");
 +		aux.ks = kseq_init(fp);
@@ -360,12 +380,18 @@ index be7ba0e..25905a5 100644
 +				fp2 = gzdopen(fd2, "r");
 +				aux.ks2 = kseq_init(fp2);
 +				opt->flag |= MEM_F_PE;
- 			}
--			fp2 = gzdopen(fd2, "r");
--			aux.ks2 = kseq_init(fp2);
--			opt->flag |= MEM_F_PE;
- 		}
--	}
++			}
++		}
++		bwa_print_sam_hdr(aux.idx->bns, hdr_line);
++		aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
++		kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
++	
++		iter_count++;	
++	
++		if (!is_interactive){
++			break;
++		}	
+ 	}
 -	bwa_print_sam_hdr(aux.idx->bns, hdr_line);
 -	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
 -	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
@@ -378,9 +404,7 @@ index be7ba0e..25905a5 100644
 -		kseq_destroy(aux.ks2);
 -		err_gzclose(fp2); kclose(ko2);
 -	}
-+		bwa_print_sam_hdr(aux.idx->bns, hdr_line);
-+		aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-+		kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
++
 +		free(hdr_line);
 +		if (opt->pmt != NULL) {
 +			fclose(opt->encrypt_out);
@@ -396,8 +420,6 @@ index be7ba0e..25905a5 100644
 +			err_gzclose(fp2); kclose(ko2);
 +		}
 +
-+		after_first_iter = 1;
-+	} while (is_interactive);
  	return 0;
  }
  
