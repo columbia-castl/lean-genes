@@ -1,514 +1,443 @@
 diff --git a/Makefile b/Makefile
-index 0498327..5480536 100644
+index 5480536..b087da2 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -5,13 +5,13 @@ WRAP_MALLOC=-DUSE_MALLOC_WRAPPERS
  AR=			ar
  DFLAGS=		-DHAVE_PTHREAD $(WRAP_MALLOC)
  LOBJS=		utils.o kthread.o kstring.o ksw.o bwt.o bntseq.o bwa.o bwamem.o bwamem_pair.o bwamem_extra.o malloc_wrap.o \
--			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o read_pmt.o ../tiny-AES-c/aes.o
-+			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o
+-			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o
++			QSufSort.o bwt_gen.o rope.o rle.o is.o bwtindex.o read_pmt.o ../tiny-AES-c/aes.o
  AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bamlite.o \
  			bwape.o kopen.o pemerge.o maxk.o \
  			bwtsw2_core.o bwtsw2_main.o bwtsw2_aux.o bwt_lite.o \
  			bwtsw2_chain.o fastmap.o bwtsw2_pair.o
  PROG=		bwa
--INCLUDES=	-I../tiny-AES-c	
-+INCLUDES=	
+-INCLUDES=	
++INCLUDES=	-I../tiny-AES-c
  LIBS=		-lm -lz -lpthread
  SUBDIRS=	.
  
-@@ -44,13 +44,12 @@ depend:
+@@ -44,12 +44,13 @@ depend:
  # DO NOT DELETE THIS LINE -- make depend depends on it.
  
  QSufSort.o: QSufSort.h
--../tiny-AES-c/aes.o: ../tiny-AES-c/aes.h 
++../tiny-AES-c/aes.o: ../tiny-AES-c/aes.h
  bamlite.o: bamlite.h malloc_wrap.h
  bntseq.o: bntseq.h utils.h kseq.h malloc_wrap.h khash.h
  bwa.o: bntseq.h bwa.h bwt.h ksw.h utils.h kstring.h malloc_wrap.h kvec.h
  bwa.o: kseq.h
  bwamem.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h ksw.h kvec.h
--bwamem.o: ksort.h utils.h kbtree.h read_pmt.h ../tiny-AES-c/aes.h
-+bwamem.o: ksort.h utils.h kbtree.h
+-bwamem.o: ksort.h utils.h kbtree.h
++bwamem.o: ksort.h utils.h kbtree.h read_pmt.h ../tiny-AES-c/aes.h
  bwamem_extra.o: bwa.h bntseq.h bwt.h bwamem.h kstring.h malloc_wrap.h
  bwamem_pair.o: kstring.h malloc_wrap.h bwamem.h bwt.h bntseq.h bwa.h kvec.h
  bwamem_pair.o: utils.h ksw.h
-@@ -75,7 +74,7 @@ bwtsw2_main.o: bwt.h bwtsw2.h bntseq.h bwt_lite.h utils.h bwa.h
+@@ -74,7 +75,7 @@ bwtsw2_main.o: bwt.h bwtsw2.h bntseq.h bwt_lite.h utils.h bwa.h
  bwtsw2_pair.o: utils.h bwt.h bntseq.h bwtsw2.h bwt_lite.h kstring.h
  bwtsw2_pair.o: malloc_wrap.h ksw.h
  example.o: bwamem.h bwt.h bntseq.h bwa.h kseq.h malloc_wrap.h
--fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h read_pmt.h
-+fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h
+-fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h
++fastmap.o: bwa.h bntseq.h bwt.h bwamem.h kvec.h malloc_wrap.h utils.h kseq.h read_pmt.h
  is.o: malloc_wrap.h
  kopen.o: malloc_wrap.h
  kstring.o: kstring.h malloc_wrap.h
-@@ -84,7 +83,6 @@ main.o: kstring.h malloc_wrap.h utils.h
+@@ -83,6 +84,7 @@ main.o: kstring.h malloc_wrap.h utils.h
  malloc_wrap.o: malloc_wrap.h
  maxk.o: bwa.h bntseq.h bwt.h bwamem.h kseq.h malloc_wrap.h
  pemerge.o: ksw.h kseq.h malloc_wrap.h kstring.h bwa.h bntseq.h bwt.h utils.h
--read_pmt.o: read_pmt.h
++read_pmt.o: read_pmt.h
  rle.o: rle.h
  rope.o: rle.h rope.h
  utils.o: utils.h ksort.h malloc_wrap.h kseq.h
 diff --git a/bwamem.c b/bwamem.c
-index f303324..03e2a05 100644
+index 03e2a05..8aa8199 100644
 --- a/bwamem.c
 +++ b/bwamem.c
-@@ -46,8 +46,6 @@
+@@ -46,6 +46,8 @@
  #  include "malloc_wrap.h"
  #endif
  
--#define AES_BLOCK_SIZE 16
--
++#define AES_BLOCK_SIZE 16
++
  /* Theory on probability and scoring *ungapped* alignment
   *
   * s'(a,b) = log[P(b|a)/P(b)] = log[4P(b|a)], assuming uniform base distribution
-@@ -874,19 +872,7 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -872,7 +874,19 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  	kputw((p->flag&0xffff) | (p->flag&0x10000? 0x100 : 0), str); kputc('\t', str); // FLAG
  	if (p->rid >= 0) { // with coordinate
  		kputs(bns->anns[p->rid].name, str); kputc('\t', str); // RNAME
--		if (opt->pmt == NULL) {
--			kputl(p->pos + 1, str); kputc('\t', str); // POS
--		}
--		else {
--			if (p->pos < opt->pmt->pmt_size) {	
--				kputl(opt->pmt->pmt_table[p->pos + 1] , str); kputc('\t', str); //PMT POS
--				//printf("Original pos: %ld, permuted pos: %d\n", p->pos, opt->pmt->pmt_table[p->pos]);
--			}
--			else {
--				fprintf(stderr, "BWA-meme error! Wrong PMT loaded.\n");
--				exit(1);
--			}
--		}
-+		kputl(p->pos + 1, str); kputc('\t', str); // POS
+-		kputl(p->pos + 1, str); kputc('\t', str); // POS
++		if (opt->pmt == NULL) {
++			kputl(p->pos + 1, str); kputc('\t', str); // POS
++		}
++		else {
++			if (p->pos < opt->pmt->pmt_size) {
++				kputl(opt->pmt->pmt_table[p->pos + 1] , str); kputc('\t', str); //PMT POS
++				//printf("Original pos: %ld, permuted pos: %d\n", p->pos, opt->pmt->pmt_table[p->pos]);
++			}
++			else {
++				fprintf(stderr, "BWA-meme error! Wrong PMT loaded.\n");
++				exit(1);
++			}
++		}
  		kputw(p->mapq, str); kputc('\t', str); // MAPQ
  		add_cigar(opt, p, str, which);
  	} else kputsn("*\t0\t0\t*", 7, str); // without coordinte
-@@ -916,64 +902,8 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -902,8 +916,64 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qb += p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qe -= p->cigar[p->n_cigar-1]>>4;
  		}
--
--		if (opt->pmt == NULL){
--			ks_resize(str, str->l + (qe - qb) + 1);
--			for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
--		}
--		else {
--			//ADDING ECB ENCRYPTION OF READS.
--			struct AES_ctx ctx;
--			uint8_t key[16];
--
--			//ks_resize(str, str->l + (qe - qb) + 1  + (AES_BLOCK_SIZE - ((qe - qb) % AES_BLOCK_SIZE)));
--			ks_resize(str, str->l + 2);
--			kputc('*', str);
--			
--			//TODO start w 0 key for debugging, etc
--			for (int i = 0; i < 16; i++) {
--				key[i] = 0;
--			}
--
--			AES_init_ctx(&ctx, key);
--
--			int len_scanned = 0;
--			unsigned char data_buf[AES_BLOCK_SIZE];
--
--			int num_blocks = (qe-qb)/AES_BLOCK_SIZE;
--			if ((qe-qb) % AES_BLOCK_SIZE) num_blocks++;
--			
--			//To treat it like a string, add the null terminator	
--			//data_buf[AES_BLOCK_SIZE] = 0;
--
--			if (p->flag != 2048) {
--				for (i = 0; i < num_blocks; i++) {
--					for (int j = 0; j < AES_BLOCK_SIZE; j++) {
--						if (len_scanned >= (qe-qb)){
--							data_buf[j] = '0';
--						}
--						else {
--							data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
--						}
--						len_scanned++;
--					}
--					//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
--					AES_ECB_encrypt(&ctx, data_buf);
--					//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
--					for (int k = 0; k < AES_BLOCK_SIZE; k++) {
--						//printf("%02X ", data_buf[k]);
--						//str->s[str->l++] = data_buf[k];
--					}
--					//printf("\n");
--					fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
--
--					//AES_ECB_decrypt(&ctx, data_buf);
--					//printf("CONFIRM DECRYPT: %s\n", data_buf);
--				}
--				//printf("*****\n\n");
--			}
--		}
--	
-+		ks_resize(str, str->l + (qe - qb) + 1);
-+		for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
+-		ks_resize(str, str->l + (qe - qb) + 1);
+-		for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
++
++		if (opt->pmt == NULL){
++			ks_resize(str, str->l + (qe - qb) + 1);
++			for (i = qb; i < qe; ++i) str->s[str->l++] = "ACGTN"[(int)s->seq[i]];
++		}
++		else {
++			//ADDING ECB ENCRYPTION OF READS.
++			struct AES_ctx ctx;
++			uint8_t key[16];
++
++			//ks_resize(str, str->l + (qe - qb) + 1  + (AES_BLOCK_SIZE - ((qe - qb) % AES_BLOCK_SIZE)));
++			ks_resize(str, str->l + 2);
++			kputc('*', str);
++
++			//TODO start w 0 key for debugging, etc
++			for (int i = 0; i < 16; i++) {
++				key[i] = 0;
++			}
++
++			AES_init_ctx(&ctx, key);
++
++			int len_scanned = 0;
++			unsigned char data_buf[AES_BLOCK_SIZE];
++
++			int num_blocks = (qe-qb)/AES_BLOCK_SIZE;
++			if ((qe-qb) % AES_BLOCK_SIZE) num_blocks++;
++
++			//To treat it like a string, add the null terminator
++			//data_buf[AES_BLOCK_SIZE] = 0;
++
++			if (p->flag != 2048) {
++				for (i = 0; i < num_blocks; i++) {
++					for (int j = 0; j < AES_BLOCK_SIZE; j++) {
++						if (len_scanned >= (qe-qb)){
++							data_buf[j] = '0';
++						}
++						else {
++							data_buf[j] = "ACGTN"[(int)s->seq[len_scanned]];
++						}
++						len_scanned++;
++					}
++					//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
++					AES_ECB_encrypt(&ctx, data_buf);
++					//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
++					for (int k = 0; k < AES_BLOCK_SIZE; k++) {
++						//printf("%02X ", data_buf[k]);
++						//str->s[str->l++] = data_buf[k];
++					}
++					//printf("\n");
++					fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
++
++					//AES_ECB_decrypt(&ctx, data_buf);
++					//printf("CONFIRM DECRYPT: %s\n", data_buf);
++				}
++				//printf("*****\n\n");
++			}
++		}
++
  		kputc('\t', str);
  		if (s->qual) { // printf qual
  			ks_resize(str, str->l + (qe - qb) + 1);
-@@ -986,65 +916,9 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
+@@ -916,9 +986,65 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
  			if ((p->cigar[0]&0xf) == 4 || (p->cigar[0]&0xf) == 3) qe -= p->cigar[0]>>4;
  			if ((p->cigar[p->n_cigar-1]&0xf) == 4 || (p->cigar[p->n_cigar-1]&0xf) == 3) qb += p->cigar[p->n_cigar-1]>>4;
  		}
--		
--	
--		if (opt->pmt == NULL) {	
--			ks_resize(str, str->l + (qe - qb) + 1);
--			for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
--		}
--		else {
--			//ADDING ECB ENCRYPTION OF READS.
--			struct AES_ctx ctx;
--			uint8_t key[16];
--
--			//ks_resize(str, str->l + (qe - qb) + 1  + (AES_BLOCK_SIZE - ((qe - qb) % AES_BLOCK_SIZE)));
--			ks_resize(str, str->l + 2);
--			kputc('*', str);
--			
--			//TODO start w 0 key for debugging, etc
--			for (int i = 0; i < 16; i++) {
--				key[i] = 0;
--			}
--
--			AES_init_ctx(&ctx, key);
--
--			int len_scanned = 0;
--			unsigned char data_buf[AES_BLOCK_SIZE];
--
--			int num_blocks = (qe-qb)/AES_BLOCK_SIZE;
--			if ((qe-qb) % AES_BLOCK_SIZE) num_blocks++;
--			
--			//To treat it like a string, add the null terminator	
--			//data_buf[AES_BLOCK_SIZE] = 0;
--
--			for (i = 0; i < num_blocks; i++) {
--				for (int j = 0; j < AES_BLOCK_SIZE; j++) {
--					if (len_scanned >= (qe-qb)){
--						data_buf[j] = '0';
--					}
--					else {
--						data_buf[j] = "TGCAN"[(int)s->seq[(qe-1) - len_scanned]];
--					}
--					len_scanned++;
--				}
--				//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
--				AES_ECB_encrypt(&ctx, data_buf);
--				//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
--				for (int k = 0; k < AES_BLOCK_SIZE; k++) {
--					//printf("%02X ", data_buf[k]);
--					//str->s[str->l++] = data_buf[k];
--				}
--				//printf("\n");
--				fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
--
--				//AES_ECB_decrypt(&ctx, data_buf);
--				//printf("CONFIRM DECRYPT: %s\n", data_buf);
--			}
--			//printf("*****\n\n");
--		}
--	
-+		ks_resize(str, str->l + (qe - qb) + 1);
-+		for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
+-		ks_resize(str, str->l + (qe - qb) + 1);
+-		for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
++
++
++		if (opt->pmt == NULL) {
++			ks_resize(str, str->l + (qe - qb) + 1);
++			for (i = qe-1; i >= qb; --i) str->s[str->l++] = "TGCAN"[(int)s->seq[i]];
++		}
++		else {
++			//ADDING ECB ENCRYPTION OF READS.
++			struct AES_ctx ctx;
++			uint8_t key[16];
++
++			//ks_resize(str, str->l + (qe - qb) + 1  + (AES_BLOCK_SIZE - ((qe - qb) % AES_BLOCK_SIZE)));
++			ks_resize(str, str->l + 2);
++			kputc('*', str);
++
++			//TODO start w 0 key for debugging, etc
++			for (int i = 0; i < 16; i++) {
++				key[i] = 0;
++			}
++
++			AES_init_ctx(&ctx, key);
++
++			int len_scanned = 0;
++			unsigned char data_buf[AES_BLOCK_SIZE];
++
++			int num_blocks = (qe-qb)/AES_BLOCK_SIZE;
++			if ((qe-qb) % AES_BLOCK_SIZE) num_blocks++;
++
++			//To treat it like a string, add the null terminator
++			//data_buf[AES_BLOCK_SIZE] = 0;
++
++			for (i = 0; i < num_blocks; i++) {
++				for (int j = 0; j < AES_BLOCK_SIZE; j++) {
++					if (len_scanned >= (qe-qb)){
++						data_buf[j] = '0';
++					}
++					else {
++						data_buf[j] = "TGCAN"[(int)s->seq[(qe-1) - len_scanned]];
++					}
++					len_scanned++;
++				}
++				//printf("ECB PREENCRYPTED DATABUF VAL:%s\n", data_buf);
++				AES_ECB_encrypt(&ctx, data_buf);
++				//printf("ECB ENCRYPTED DATABUF VAL: %s\n", data_buf);
++				for (int k = 0; k < AES_BLOCK_SIZE; k++) {
++					//printf("%02X ", data_buf[k]);
++					//str->s[str->l++] = data_buf[k];
++				}
++				//printf("\n");
++				fwrite(data_buf, AES_BLOCK_SIZE, 1, opt->encrypt_out);
++
++				//AES_ECB_decrypt(&ctx, data_buf);
++				//printf("CONFIRM DECRYPT: %s\n", data_buf);
++			}
++			//printf("*****\n\n");
++		}
++
  		kputc('\t', str);
--		
++
  		if (s->qual) { // printf qual
  			ks_resize(str, str->l + (qe - qb) + 1);
  			for (i = qe-1; i >= qb; --i) str->s[str->l++] = s->qual[i];
 diff --git a/bwamem.h b/bwamem.h
-index fd09605..0a0e3bb 100644
+index 0a0e3bb..69d46f5 100644
 --- a/bwamem.h
 +++ b/bwamem.h
-@@ -30,15 +30,10 @@
+@@ -30,10 +30,15 @@
  #include "bwt.h"
  #include "bntseq.h"
  #include "bwa.h"
--#include "read_pmt.h"
--#include "aes.h"
++#include "read_pmt.h"
++#include "aes.h"
  
  #define MEM_MAPQ_COEF 30.0
  #define MEM_MAPQ_MAX  60
  
--#define ENCRYPT_FILE "encrypted.bytes"
--#define MAX_BATCH_DIGITS 4
--
++#define ENCRYPT_FILE "encrypted.bytes"
++#define MAX_BATCH_DIGITS 4
++
  struct __smem_i;
  typedef struct __smem_i smem_i;
  
-@@ -86,10 +81,6 @@ typedef struct {
+@@ -81,6 +86,10 @@ typedef struct {
  	int max_matesw;         // perform maximally max_matesw rounds of mate-SW for each end
  	int max_XA_hits, max_XA_hits_alt; // if there are max_hits or fewer, output them all
  	int8_t mat[25];         // scoring matrix; mat[0] == 0 if unset
--	
--	struct pmt_struct* pmt;
--	FILE* encrypt_out;
--	int batch_id;
++
++	struct pmt_struct* pmt;
++	FILE* encrypt_out;
++	int batch_id;
  } mem_opt_t;
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index 149bf7d..be7ba0e 100644
+index be7ba0e..0186923 100644
 --- a/fastmap.c
 +++ b/fastmap.c
-@@ -146,7 +146,6 @@ int main_mem(int argc, char *argv[])
+@@ -146,6 +146,8 @@ int main_mem(int argc, char *argv[])
  	gzFile fp, fp2 = 0;
  	char *p, *rg_line = 0, *hdr_line = 0;
  	const char *mode = 0;
--	int is_interactive = 0;
++	int is_interactive = 0;
++	int is_encrypting = 0;
  	void *ko = 0, *ko2 = 0;
  	mem_pestat_t pes[4];
  	ktp_aux_t aux;
-@@ -157,7 +156,7 @@ int main_mem(int argc, char *argv[])
+@@ -156,7 +158,7 @@ int main_mem(int argc, char *argv[])
  
  	aux.opt = opt = mem_opt_init();
  	memset(&opt0, 0, sizeof(mem_opt_t));
--	while ((c = getopt(argc, argv, "51qpaMCSPVYjuie:k:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
-+	while ((c = getopt(argc, argv, "51qpaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
+-	while ((c = getopt(argc, argv, "51qpaMCSPVYjuk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
++	while ((c = getopt(argc, argv, "51qpaMCSPVYjuie:k:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:o:f:W:x:G:h:y:K:X:H:F:z:")) >= 0) {
  		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
  		else if (c == '1') no_mt_io = 1;
  		else if (c == 'x') mode = optarg;
-@@ -194,29 +193,6 @@ int main_mem(int argc, char *argv[])
+@@ -193,6 +195,31 @@ int main_mem(int argc, char *argv[])
  		else if (c == 'K') fixed_chunk_size = atoi(optarg);
  		else if (c == 'X') opt->mask_level = atof(optarg);
  		else if (c == 'F') bwa_dbg = atoi(optarg);
--		else if (c == 'i') is_interactive = 1;
--		else if (c == 'e') {
--			opt->pmt = read_pmt(DEFAULT);
--			int has_batch_id = 0;
--
--			if (strcmp(optarg, "N") != 0) {
--				opt->batch_id = atoi(optarg);
--				has_batch_id = 1;
--			}
--
--			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
--			strcpy(filename, ENCRYPT_FILE);
--			if (has_batch_id) strcat(filename, "_");
--
--			char id_string[MAX_BATCH_DIGITS];
--			if (has_batch_id) {
--				sprintf(id_string, "%d", opt->batch_id);
--				strcat(filename, id_string);
--			}
--
--			opt->encrypt_out = fopen(filename, "wb");
--			free(filename);
--		}
++		else if (c == 'i') is_interactive = 1;
++		else if (c == 'e') {
++			is_encrypting = 1;
++
++			opt->pmt = read_pmt(DEFAULT);
++			int has_batch_id = 0;
++
++			if (strcmp(optarg, "N") != 0) {
++				opt->batch_id = atoi(optarg);
++				has_batch_id = 1;
++			}
++
++			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
++			strcpy(filename, ENCRYPT_FILE);
++			if (has_batch_id) strcat(filename, "_");
++
++			char id_string[MAX_BATCH_DIGITS];
++			if (has_batch_id) {
++				sprintf(id_string, "%d", opt->batch_id);
++				strcat(filename, id_string);
++			}
++
++			opt->encrypt_out = fopen(filename, "wb");
++			free(filename);
++		}
  		else if (c == 'h') {
  			opt0.max_XA_hits = opt0.max_XA_hits_alt = 1;
  			opt->max_XA_hits = opt->max_XA_hits_alt = strtol(optarg, &p, 10);
-@@ -288,10 +264,6 @@ int main_mem(int argc, char *argv[])
+@@ -264,6 +291,10 @@ int main_mem(int argc, char *argv[])
  	}
  
  	if (opt->n_threads < 1) opt->n_threads = 1;
--
--	//printf("argc: %d\n", argc);
--	//printf("optind: %d\n", optind);
--
++
++	//printf("argc: %d\n", argc);
++	//printf("optind: %d\n", optind);
++
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -395,79 +367,41 @@ int main_mem(int argc, char *argv[])
- 	if (ignore_alt)
- 		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
+@@ -369,39 +400,95 @@ int main_mem(int argc, char *argv[])
  			aux.idx->bns->anns[i].is_alt = 0;
--	
--	ko = kopen(argv[optind + 1], &fd);
--	int iter_count = 0;	
--	//INTERACTIVE
--	while (1){
--		char batchfile[64];
--		
--		if (iter_count) {
--			printf("BATCH FINISH\n");
--		}
--		if (is_interactive) {
--			scanf("%s", batchfile);
--
--			if (!strcmp(batchfile, "quit")){
--				break;
--			}
--
--			ko = kopen(batchfile, &fd);
--		}
--		else {
--			memcpy(batchfile, argv[optind+1], 64);
--		}
  
--		if (ko == 0) {
--			if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, batchfile);
--			return 1;
--		}
--		else {
--			//printf("GET BATCHFILE: %s\n", batchfile);
--		}
--		fp = gzdopen(fd, "r");
--		aux.ks = kseq_init(fp);
--		if (optind + 2 < argc) {
--			if (opt->flag&MEM_F_PE) {
--				if (bwa_verbose >= 2)
--					fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
--			} else {
--				ko2 = kopen(argv[optind + 2], &fd2);
--				if (ko2 == 0) {
--					if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
--					return 1;
--				}
--				fp2 = gzdopen(fd2, "r");
--				aux.ks2 = kseq_init(fp2);
--				opt->flag |= MEM_F_PE;
-+	ko = kopen(argv[optind + 1], &fd);
-+	if (ko == 0) {
-+		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
-+		return 1;
-+	}
-+	fp = gzdopen(fd, "r");
-+	aux.ks = kseq_init(fp);
-+	if (optind + 2 < argc) {
-+		if (opt->flag&MEM_F_PE) {
-+			if (bwa_verbose >= 2)
-+				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
-+		} else {
-+			ko2 = kopen(argv[optind + 2], &fd2);
-+			if (ko2 == 0) {
-+				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
-+				return 1;
+ 	ko = kopen(argv[optind + 1], &fd);
+-	if (ko == 0) {
+-		if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
+-		return 1;
+-	}
+-	fp = gzdopen(fd, "r");
+-	aux.ks = kseq_init(fp);
+-	if (optind + 2 < argc) {
+-		if (opt->flag&MEM_F_PE) {
+-			if (bwa_verbose >= 2)
+-				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
+-		} else {
+-			ko2 = kopen(argv[optind + 2], &fd2);
+-			if (ko2 == 0) {
+-				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
+-				return 1;
++	int iter_count = 0;
++	//INTERACTIVE
++	while (1){
++		char batchfile[64];
++
++		if (iter_count) {
++			printf("BATCH FINISH\n");
++		}
++		if (is_interactive) {
++			scanf("%s", batchfile);
++
++			if (!strcmp(batchfile, "quit")){
++				break;
  			}
-+			fp2 = gzdopen(fd2, "r");
-+			aux.ks2 = kseq_init(fp2);
-+			opt->flag |= MEM_F_PE;
+-			fp2 = gzdopen(fd2, "r");
+-			aux.ks2 = kseq_init(fp2);
+-			opt->flag |= MEM_F_PE;
++
++			ko = kopen(batchfile, &fd);
++		}
++		else {
++			memcpy(batchfile, argv[optind+1], 64);
++		}
++
++		if (ko == 0) {
++			if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, batchfile);
++			return 1;
++		}
++		else {
++			//printf("GET BATCHFILE: %s\n", batchfile);
++		}
++		fp = gzdopen(fd, "r");
++		aux.ks = kseq_init(fp);
++		if (optind + 2 < argc) {
++			if (opt->flag&MEM_F_PE) {
++				if (bwa_verbose >= 2)
++					fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
++			} else {
++				ko2 = kopen(argv[optind + 2], &fd2);
++				if (ko2 == 0) {
++					if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
++					return 1;
++				}
++				fp2 = gzdopen(fd2, "r");
++				aux.ks2 = kseq_init(fp2);
++				opt->flag |= MEM_F_PE;
++			}
++		}
++		bwa_print_sam_hdr(aux.idx->bns, hdr_line);
++		aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
++		kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
++
++		iter_count++;
++
++		if (!is_interactive){
++			break;
++		}
++		else if (is_encrypting){
++			fclose(opt->encrypt_out);
++
++			//When encrypting AND interactive, automatically increment batch IDs
++			opt->batch_id++;			
++			
++			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
++			strcpy(filename, ENCRYPT_FILE);
++			strcat(filename, "_");
++
++			char id_string[MAX_BATCH_DIGITS];
++			sprintf(id_string, "%d", opt->batch_id);
++			strcat(filename, id_string);
++
++			opt->encrypt_out = fopen(filename, "wb");
++			free(filename);
++
  		}
--		bwa_print_sam_hdr(aux.idx->bns, hdr_line);
--		aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
--		kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
--	
--		iter_count++;	
--	
--		if (!is_interactive){
--			break;
--		}	
  	}
--
--		free(hdr_line);
--		if (opt->pmt != NULL) {
--			fclose(opt->encrypt_out);
--			free(opt->pmt->pmt_table);
--			free(opt->pmt);
--		}
--		free(opt);
--		bwa_idx_destroy(aux.idx);
--		kseq_destroy(aux.ks);
--		err_gzclose(fp); kclose(ko);
--		if (aux.ks2) {
--			kseq_destroy(aux.ks2);
--			err_gzclose(fp2); kclose(ko2);
--		}
--
-+	bwa_print_sam_hdr(aux.idx->bns, hdr_line);
-+	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-+	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
-+	free(hdr_line);
-+	free(opt);
-+	bwa_idx_destroy(aux.idx);
-+	kseq_destroy(aux.ks);
-+	err_gzclose(fp); kclose(ko);
-+	if (aux.ks2) {
-+		kseq_destroy(aux.ks2);
-+		err_gzclose(fp2); kclose(ko2);
-+	}
+-	bwa_print_sam_hdr(aux.idx->bns, hdr_line);
+-	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
+-	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+-	free(hdr_line);
+-	free(opt);
+-	bwa_idx_destroy(aux.idx);
+-	kseq_destroy(aux.ks);
+-	err_gzclose(fp); kclose(ko);
+-	if (aux.ks2) {
+-		kseq_destroy(aux.ks2);
+-		err_gzclose(fp2); kclose(ko2);
+-	}
++
++		free(hdr_line);
++		if (opt->pmt != NULL) {
++			fclose(opt->encrypt_out);
++			free(opt->pmt->pmt_table);
++			free(opt->pmt);
++		}
++		free(opt);
++		bwa_idx_destroy(aux.idx);
++		kseq_destroy(aux.ks);
++		err_gzclose(fp); kclose(ko);
++		if (aux.ks2) {
++			kseq_destroy(aux.ks2);
++			err_gzclose(fp2); kclose(ko2);
++		}
++
  	return 0;
  }
  
-diff --git a/read_pmt.c b/read_pmt.c
-deleted file mode 100644
-index 5801c32..0000000
---- a/read_pmt.c
-+++ /dev/null
-@@ -1,65 +0,0 @@
--#include "read_pmt.h"
--
--struct pmt_struct* read_pmt(int type) {
--
--	FILE* pmt_file;
--	if (type) {
--		pmt_file = fopen("ipmt.csv","r");
--	}
--	else {
--		pmt_file = fopen("pmt.csv","r");
--	}
--	
--	struct pmt_struct* pmt_buf = (struct pmt_struct*) malloc(sizeof(struct pmt_struct));
--
--	if (pmt_file == NULL) {
--		printf("Could not find the PMT file!\n");
--		exit(1);
--	}
--	else {
--		int perm_len;
--		int items_scanned;
--
--		items_scanned = fscanf(pmt_file, "%d:", &perm_len);
--
--		pmt_buf->pmt_size = perm_len;
--		//printf("Perm len is %d\n", perm_len);
--
--		pmt_buf->pmt_table = (int*) malloc(perm_len * sizeof(int));
--		int buf_index = 0;
--		
--		int nums_remaining = perm_len - 1;
--		
--		while (nums_remaining) {
--			items_scanned = fscanf(pmt_file, "%d,", pmt_buf->pmt_table + buf_index);
--			nums_remaining--;
--			buf_index++;
--
--			if (!items_scanned) {
--				fprintf(stderr, "Expected another PMT entry, there was none.\n");
--				fprintf(stderr, "PMT size %d, %d items remaining\n", pmt_buf->pmt_size, nums_remaining);	
--				exit(1);
--			}		
--		}
--
--		items_scanned = fscanf(pmt_file, "%d", pmt_buf->pmt_table + buf_index);
--		if (!items_scanned) {
--			fprintf(stderr, "Expected final PMT entry, there was none.\n");
--			exit(1);	
--		}
--	
--	}
--	
--	fclose(pmt_file);	
--	//printf("PMT fully scanned.\n");
--	return pmt_buf;
--}
--
--/*
--int main() {
--	struct pmt_struct* pmt = read_pmt(DEFAULT);
--	printf("Entry 42836700: %d\n", pmt->pmt_table[42836700]);
--	free(pmt->pmt_table);
--	free(pmt);
--	return 0;
--}*/ 
-diff --git a/read_pmt.h b/read_pmt.h
-deleted file mode 100644
-index 4307aed..0000000
---- a/read_pmt.h
-+++ /dev/null
-@@ -1,12 +0,0 @@
--#include <stdio.h>
--#include <stdlib.h>
--
--#define INVERSE 1
--#define DEFAULT 0
--
--struct pmt_struct {
--	int pmt_size;
--	int* pmt_table;
--};
--
--struct pmt_struct* read_pmt(int type);

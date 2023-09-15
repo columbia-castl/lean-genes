@@ -707,16 +707,16 @@ def main():
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', client_settings["result_port"]))
 
-    begin_time = time.time()
-    pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
-    end_time = time.time()
-    print("PMT permutation generated in ", end_time - begin_time, "seconds.")
+    #begin_time = time.time()
+    #pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
+    #end_time = time.time()
+    #print("PMT permutation generated in ", end_time - begin_time, "seconds.")
 
     if debug:
         print("PMT")
         print(pmt)
     
-    ipmt = make_ipmt(client_settings["write_ipmt"])
+    #ipmt = make_ipmt(client_settings["write_ipmt"])
     if client_settings["write_ipmt"]:
         exit()
 

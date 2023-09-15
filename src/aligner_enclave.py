@@ -63,8 +63,8 @@ def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
         if enclave_settings["interactive_bwa"]:
 
             if enclave_settings["enable_bwa_pmt"] and (not bwa_running):
-                cmd =  [bwa_path + "bwa", "mem", "-i" ,fasta , "-", "2>/dev/null/"]
-                cmd_str = bwa_path + "bwa " + "mem -i " + fasta + " x"
+                cmd =  [bwa_path + "bwa", "mem", "-i", "-e", "0", fasta, "-", "2>/dev/null/"]
+                cmd_str = bwa_path + "bwa " + "mem -i -e 0 " + fasta + " x"
                 bash_cmd_str = "/bin/bash -c " + cmd_str + " -- 2>/dev/null"
                 #call_bwa = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE)
                 call_bwa = pexpect.spawn(cmd_str, echo=False) 
