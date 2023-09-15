@@ -220,7 +220,7 @@ index 03e2a05..8aa8199 100644
  			ks_resize(str, str->l + (qe - qb) + 1);
  			for (i = qe-1; i >= qb; --i) str->s[str->l++] = s->qual[i];
 diff --git a/bwamem.h b/bwamem.h
-index 0a0e3bb..69d46f5 100644
+index 0a0e3bb..db38478 100644
 --- a/bwamem.h
 +++ b/bwamem.h
 @@ -30,10 +30,15 @@
@@ -233,7 +233,7 @@ index 0a0e3bb..69d46f5 100644
  #define MEM_MAPQ_COEF 30.0
  #define MEM_MAPQ_MAX  60
  
-+#define ENCRYPT_FILE "encrypted.bytes"
++#define ENCRYPT_FILE "lg_encrypted.bytes"
 +#define MAX_BATCH_DIGITS 4
 +
  struct __smem_i;
@@ -251,7 +251,7 @@ index 0a0e3bb..69d46f5 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..0186923 100644
+index be7ba0e..aea0d94 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,8 @@ int main_mem(int argc, char *argv[])
@@ -395,8 +395,8 @@ index be7ba0e..0186923 100644
 +			fclose(opt->encrypt_out);
 +
 +			//When encrypting AND interactive, automatically increment batch IDs
-+			opt->batch_id++;			
-+			
++			opt->batch_id++;
++
 +			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
 +			strcpy(filename, ENCRYPT_FILE);
 +			strcat(filename, "_");

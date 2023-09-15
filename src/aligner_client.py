@@ -238,9 +238,9 @@ def decrypt_exact_batch(batch_num):
 
     read_length = genome_params["READ_LENGTH"] + (leangenes_params["AES_BLOCK_SIZE"] - (genome_params["READ_LENGTH"] % leangenes_params["AES_BLOCK_SIZE"]))
 
-    exma_file = open('enclave.bytes_' + str(batch_num), 'rb')
+    exma_file = open('lg_enclave.bytes_' + str(batch_num), 'rb')
     sam_file = open('lg_out.sam_' + str(batch_num), 'r')
-    stitch_file = open('stitched.sam_' + str(batch_num), 'w')
+    stitch_file = open('lg_stitched.sam_' + str(batch_num), 'w')
    
     #Prepare SAM
     reading_header = True
@@ -575,8 +575,8 @@ def spawn_results_processes(crypto, savefile, post_proc):
         print("Batch ID Type: ", batch_id.type)
         print("|Encrypted Bytes|: ", len(batch_id.encrypted_seqs))
 
-        sam_file = open('lg_out.sam_' + str(batch_id.num), 'wb')
-        read_file = open('enclave.bytes_' + str(batch_id.num), 'wb')
+        sam_file = open('lg_secure_batch_' + str(batch_id.num), 'wb')
+        read_file = open('lg_enclave.bytes_' + str(batch_id.num), 'wb')
 
         if batch_id.type == 1:
             print("<results>: Last BWA batch num indicated")
@@ -633,7 +633,6 @@ def spawn_results_processes(crypto, savefile, post_proc):
                     print("SEND POST_PROC KILL!")
                     #post_proc.send_signal(signal.SIGTERM)
                     post_proc.stdin.write(bytes("quit\n", 'ascii')) 
-                os.system("cat stitched.sam_* > lg_out.sam") 
                 break
         else:
             if bwa_set and lg_set:
@@ -643,8 +642,9 @@ def spawn_results_processes(crypto, savefile, post_proc):
                     if client_settings["interactive_post_proc"]: 
                         post_proc.send_signal(signal.SIGTERM)
                         print("SEND POST_PROC KILL!")
-                    #os.system("cat stitched.sam_* > lg_out.sam") 
                     break
+
+        os.system("cat lg_stitched.sam_* > lg_out.sam") 
 
 #            pid = os.fork()
 #            if not pid:
@@ -707,17 +707,17 @@ def main():
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result_socket.bind(('', client_settings["result_port"]))
 
-    #begin_time = time.time()
-    #pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
-    #end_time = time.time()
-    #print("PMT permutation generated in ", end_time - begin_time, "seconds.")
-
     if debug:
         print("PMT")
         print(pmt)
     
-    #ipmt = make_ipmt(client_settings["write_ipmt"])
     if client_settings["write_ipmt"]:
+        begin_time = time.time()
+        pmt = np.random.RandomState(seed=secret_settings["perm_seed"]).permutation(genome_params["REF_LENGTH"])
+        end_time = time.time()
+        print("PMT permutation generated in ", end_time - begin_time, "seconds.")
+
+        make_ipmt()
         exit()
 
     print("Client initialized")

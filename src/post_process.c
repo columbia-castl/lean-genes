@@ -106,6 +106,10 @@ int run_batch(struct file_names* files, int read_size) {
 			if (DEBUG) printf("Correct detection of header line.\n");
 			continue;
 		}
+		else if (line_reader->qname[0] == '[') {
+			if (DEBUG) printf("Correct detection of tool metadata.\n");
+			continue;
+		}
 		else {
 			int new_pos;	
 			if ((int)line_reader->pos < i_pmt->pmt_size) {	

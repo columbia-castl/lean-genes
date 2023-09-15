@@ -8,4 +8,4 @@ post_proc:
 	gcc post_process.c read_pmt.c ../tiny-AES-c/aes.c -g -o post_proc -I../tiny-AES-c
 
 clean:
-	rm *.rdb post_proc
+	rm *.rdb post_proc lg_*

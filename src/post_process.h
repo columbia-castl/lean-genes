@@ -7,9 +7,9 @@
 #include <unistd.h>
 
 #define AES_BLOCK_SIZE 16
-#define SAM_NAME "lg_out.sam"
-#define ENCRYPTED_NAME "enclave.bytes"
-#define PROCESSED_NAME "stitched.sam"
+#define SAM_NAME "lg_secure_batch"
+#define ENCRYPTED_NAME "lg_enclave.bytes"
+#define PROCESSED_NAME "lg_stitched.sam"
 #define FULL_SAM_LINE_LEN 11
 
 #define DEBUG 0

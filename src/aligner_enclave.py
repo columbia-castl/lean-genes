@@ -40,6 +40,7 @@ pmt = []
 call_bwa = ""
 bwa_running = False
 open_bwa = True
+global_batch_counter = 0
 
 class SamState(Enum):
     PROCESSING_HEADER = 1
@@ -154,13 +155,13 @@ def sam_sender(sam_data, batch_id):
         batch_id.sam_header = sam_lines[0] + b'\n' + sam_lines[1] + b'\n' + sam_lines[2] + b'\n'
     
     try:
-        enc_reads = open('encrypted.bytes_' + str(batch_id.num), 'rb')
+        enc_reads = open('lg_encrypted.bytes_' + str(batch_id.num), 'rb')
         batch_id.encrypted_seqs = enc_reads.read()
         print("Len of encrypted bytes", len(batch_id.encrypted_seqs))
         enc_reads.close()
-        os.remove('encrypted.bytes_' + str(batch_id.num)) 
+        os.remove('lg_encrypted.bytes_' + str(batch_id.num)) 
     except FileNotFoundError:
-        print("There was no encrypted bytes file for this batch.")
+        print("There was no lg encrypted bytes file for this batch.")
 
     enc_size = _VarintBytes(batch_id.ByteSize())
     print("Encoded size len", len(enc_size))
@@ -397,6 +398,8 @@ def transfer_pmt(pmt, chrom_id=0):
     return pmt_socket
 
 def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
+    global global_batch_counter 
+
     unmatched_fastq = ""
     read_parser = Read()
 
@@ -468,11 +471,17 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
         #FLUSH READS
         #if debug:
         print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
+        
+        if enclave_settings["interactive_bwa"]:
+            batch_id.num = global_batch_counter
+            global_batch_counter += 1
+            print("GLOBAL_BATCH_COUNTER:", global_batch_counter)
+
         result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter, batch_id,)) 
         result_thread.start() 
         unmatched_fastq = ""
 
-        conn.close()    
+        conn.close()
 
 def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     #WHERE BWA IS CALLED
