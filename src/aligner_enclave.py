@@ -473,9 +473,12 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
         print("Perform connection flush, unmatched_counter = " + str(unmatched_counter))
         
         if enclave_settings["interactive_bwa"]:
+            batch_id.offset = global_batch_counter - batch_id.num
             batch_id.num = global_batch_counter
             global_batch_counter += 1
-            print("GLOBAL_BATCH_COUNTER:", global_batch_counter)
+            if debug:
+                print("GLOBAL_BATCH_COUNTER:", global_batch_counter)
+                print("BATCH OFFSET:", batch_id.offset)
 
         result_thread = threading.Thread(target=send_back_results, args=(fasta_path, bytes(unmatched_fastq, 'utf-8'),unmatched_counter, batch_id,)) 
         result_thread.start() 

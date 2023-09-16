@@ -626,7 +626,7 @@ def spawn_results_processes(crypto, savefile, post_proc):
                 dispatch_post_proc(batch_id.num)
 
         if leangenes_params["disable_exact_matching"]:
-            if bwa_set and (batches > last_bwa_batch):
+            if bwa_set and (batches + batch_id.offset > last_bwa_batch):
                 print("<results>: Client done accepting results!")
                 result_socket.close()
                 if client_settings["interactive_post_proc"]:

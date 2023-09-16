@@ -7,5 +7,8 @@ proto_clean:
 post_proc:
 	gcc post_process.c read_pmt.c ../tiny-AES-c/aes.c -g -o post_proc -I../tiny-AES-c
 
-clean:
+lg_clean:
+	rm lg_*
+
+clean_all:
 	rm *.rdb post_proc lg_*
