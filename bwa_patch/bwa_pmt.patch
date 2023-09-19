@@ -251,7 +251,7 @@ index 0a0e3bb..db38478 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..aea0d94 100644
+index be7ba0e..5ce9b08 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,8 @@ int main_mem(int argc, char *argv[])
@@ -272,7 +272,7 @@ index be7ba0e..aea0d94 100644
  		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
  		else if (c == '1') no_mt_io = 1;
  		else if (c == 'x') mode = optarg;
-@@ -193,6 +195,31 @@ int main_mem(int argc, char *argv[])
+@@ -193,6 +195,32 @@ int main_mem(int argc, char *argv[])
  		else if (c == 'K') fixed_chunk_size = atoi(optarg);
  		else if (c == 'X') opt->mask_level = atof(optarg);
  		else if (c == 'F') bwa_dbg = atoi(optarg);
@@ -281,6 +281,7 @@ index be7ba0e..aea0d94 100644
 +			is_encrypting = 1;
 +
 +			opt->pmt = read_pmt(DEFAULT);
++			printf("<<PMT READ>>\n");
 +			int has_batch_id = 0;
 +
 +			if (strcmp(optarg, "N") != 0) {
@@ -304,7 +305,7 @@ index be7ba0e..aea0d94 100644
  		else if (c == 'h') {
  			opt0.max_XA_hits = opt0.max_XA_hits_alt = 1;
  			opt->max_XA_hits = opt->max_XA_hits_alt = strtol(optarg, &p, 10);
-@@ -264,6 +291,10 @@ int main_mem(int argc, char *argv[])
+@@ -264,6 +292,10 @@ int main_mem(int argc, char *argv[])
  	}
  
  	if (opt->n_threads < 1) opt->n_threads = 1;
@@ -315,7 +316,7 @@ index be7ba0e..aea0d94 100644
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -369,39 +400,95 @@ int main_mem(int argc, char *argv[])
+@@ -369,39 +401,95 @@ int main_mem(int argc, char *argv[])
  			aux.idx->bns->anns[i].is_alt = 0;
  
  	ko = kopen(argv[optind + 1], &fd);

@@ -11,6 +11,7 @@ import os
 import numpy as np
 import threading
 import pexpect
+import queue
 
 from aligner_config import global_settings, enclave_settings, genome_params, leangenes_params, secret_settings
 from subprocess import Popen, PIPE, STDOUT
@@ -37,10 +38,9 @@ line_limit = 100
 progress_indicator = enclave_settings["hashing_progress_indicator"]
 pmt = []
 
-call_bwa = ""
-bwa_running = False
-open_bwa = True
 global_batch_counter = 0
+bwa_initialized = False
+bwa_batch_queue = queue.Queue()
 
 class SamState(Enum):
     PROCESSING_HEADER = 1
@@ -51,8 +51,44 @@ def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "bwa index " + fasta + " &")
 
+def init_interactive_bwa():
+        return call_bwa
+
+def batch_queue_manager(fasta):
+    global bwa_batch_queue
+    global bwa_id_queue
+
+    print("BATCH QUEUE MANAGER INITIALIZING")
+    
+    start_time = time.time()
+
+    bwa_path = enclave_settings["bwa_path"]
+
+    cmd =  [bwa_path + "bwa", "mem", "-i", "-e", "0", fasta, "-", "2>/dev/null/"]
+    cmd_str = bwa_path + "bwa " + "mem -i -e 0 " + fasta + " x"
+    bash_cmd_str = "/bin/bash -c " + cmd_str + " -- 2>/dev/null"
+    call_bwa = pexpect.spawn(cmd_str, echo=False) 
+    call_bwa.expect("<<PMT READ>>")
+    
+    end_time = time.time()
+
+    print("BATCH QUEUE MANAGER initialized in ", end_time - start_time, " seconds")
+
+    while True:
+        while bwa_batch_queue.empty():
+            pass
+
+        while not bwa_batch_queue.empty():
+            batch_id = bwa_batch_queue.get()
+            call_bwa.sendline(str(batch_id.num))
+            call_bwa.expect("BATCH FINISH")
+            stdout_data = call_bwa.before
+            
+            sam_sender(stdout_data, batch_id)
+
+
 def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
-    global call_bwa, bwa_running, open_bwa
+    global bwa_batch_queue
 
     if debug:
         print("Passing batched FASTQ to BWA...")
@@ -62,27 +98,12 @@ def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
         if enclave_settings["interactive_bwa"]:
-
-            if enclave_settings["enable_bwa_pmt"] and (not bwa_running):
-                cmd =  [bwa_path + "bwa", "mem", "-i", "-e", "0", fasta, "-", "2>/dev/null/"]
-                cmd_str = bwa_path + "bwa " + "mem -i -e 0 " + fasta + " x"
-                bash_cmd_str = "/bin/bash -c " + cmd_str + " -- 2>/dev/null"
-                #call_bwa = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE)
-                call_bwa = pexpect.spawn(cmd_str, echo=False) 
-                bwa_running = True
-            elif not bwa_running:
-                call_bwa = Popen([bwa_path + "bwa", "mem","-i", fasta, fastq_name ], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-                bwa_running = True
-            
             fq = open(str(batch_id.num), "wb")
             fq.write(fastq)
             fq.close()
-           
-            call_bwa.sendline(str(batch_id.num))
-            call_bwa.expect("BATCH FINISH")
-            stdout_data = call_bwa.before
-            if debug: 
-                print(stdout_data)
+            
+            bwa_batch_queue.put(batch_id)
+            stdout_data = None
 
         else:
             if enclave_settings["enable_bwa_pmt"]:
@@ -134,6 +155,7 @@ def process_read(protobuffer, read_bytes, crypto):
     return (_VarintBytes(protobuffer.ByteSize()), protobuffer.SerializeToString())
 
 def sam_sender(sam_data, batch_id):
+    start_time = time.time()
 
     if debug: 
         print("\tSAM SENDER RECEIVES: ", sam_data)
@@ -241,6 +263,9 @@ def sam_sender(sam_data, batch_id):
     
     #print(result_counter, " results were sent from this batch.")
     bwa_socket.close()
+
+    end_time = time.time()
+    print("SAM sent in ", end_time - start_time, " seconds")
 
 def server_handler(port):
     server = VsockListener()
@@ -405,6 +430,10 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
 
     anonymized_label = "@unlabeled"
 
+    if enclave_settings["interactive_bwa"]:
+        bwa_manager_thread = threading.Thread(target=batch_queue_manager, args=(fasta_path,)) 
+        bwa_manager_thread.start() 
+
     while True: 
         unmatched_socket.listen()
         conn, addr = unmatched_socket.accept()
@@ -493,22 +522,30 @@ def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
         print("FASTQ: ", fastq_bytes)
         print("FASTQ len: ", len(fastq_bytes))
 
+    marker_batch = False
+
     begin_time = time.time()
     if len(fastq_bytes):
         returned_sam = dispatch_bwa(enclave_settings["bwa_path"], fasta_path, fastq_bytes, batch_id)
     else:
         returned_sam = b''
-    end_time = time.time()
-    print("BWA-meme runs in ", end_time - begin_time, " seconds")
+        marker_batch = True
 
-    if debug: 
-        print(returned_sam)
-        print("BWA RETURNS ^^")
-
-    begin_time = time.time()
-    sam_sender(returned_sam, batch_id) 
     end_time = time.time()
-    print("SAM is sent in ", end_time - begin_time, " seconds")
+
+    if not enclave_settings["interactive_bwa"]:
+        print("BWA-mem(e) runs in ", end_time - begin_time, " seconds")
+
+        if debug: 
+            print(returned_sam)
+            print("BWA RETURNS ^^")
+
+        sam_sender(returned_sam, batch_id) 
+
+    else:
+        print("Dispatch batch to BWA queue")
+        if marker_batch:
+            sam_sender(returned_sam, batch_id)
 
 def main():
     global pmt

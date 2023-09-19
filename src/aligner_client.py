@@ -583,7 +583,7 @@ def spawn_results_processes(crypto, savefile, post_proc):
             last_bwa_batch = batch_id.num
             bwa_set = True
             if not have_header:
-                header = open('header.sam', 'wb')
+                header = open('lg_header.sam', 'wb')
                 header.write(batch_id.sam_header)
                 header.close()
                 have_header = True
