@@ -1,5 +1,4 @@
--- Python 3
--- BWA [[install with install_bwa.sh]]
--- redis [[Was built and tested with redis 7.0.5]]
--- protobuf [[need version 3, was built and tested with libprotoc 3.19.0]]
--- pexpect
+-- Python 3 
+	-- protobuf [[need version 3, was built and tested with libprotoc 3.19.0]]
+	-- pexpect
+	-- redis [[Was built and tested with redis 7.0.5]] *only if using exact matching shim
