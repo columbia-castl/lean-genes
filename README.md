@@ -2,19 +2,18 @@
 
 The code in this repository enables privacy-preserving DNA sequence alignment using BWA and a throughput-increasing shim using exact matching that together we call Lean Genes.
 
-As of right now, dependencies + versions are tracked (loosely, TODO) in requirements-unofficial.txt
-
 ## SETUP
 
-- Make sure dependencies are installed from requirements-unofficial.txt
-- Use the Makefile to generate the Python protobuf classes for message passing between the scheme's components by simply typing ``make``. If successful this should generate a file called ``reads_pb2.py``
-- Once you have done this, you can run the three separate components of the scheme and set them up using the following scripts in the ``src`` folder.
+- Install repository-level dependencies by running the script `install_dependencies.sh`
+- Make sure `python3` and associated Python dependencies are installed as documented in `requirements-unofficial.txt`
+- `cd` to `src` directory and type `make` to build the `lean-genes` code that is compiled
+- Once you have done this, you can run the three separate components of the scheme and configure their parameters using the following scripts in the ``src`` folder:
 
 ## ``src`` folder
 
 ##### Configuration
 `` aligner_config.py `` 
-This script is used to configure the remaining components of the scheme. Parameters are relatively self-explanatory from their names and are generally separated into global constants needed by all the scripts,
+This script is used to configure the remaining components of the scheme. Parameters are intended to be relatively self-explanatory from their names and are generally separated into global constants needed by all the scripts,
 parameters specific to each component (client, public cloud, enclave cloud), and parameters specific to the genome that is being worked with. Parameters are designed to promote flexibility by allowing the scheme to be 
 run on a single machine (by setting all IP addresses to 127.0.0.1 for example) or to be run on 3 completely separate machines.
 Note that each component has a set of parameters specific to it that you should verify for your use case -- for example the `aligner_cloud.py` component uses the dict `pubcloud_settings` for ports and IPs that it uses whereas `aligner_enclave.py` uses the dict `enclave_settings`, and in this sense the IP addresses are relative per-component. If you are testing with `aligner_enclave` and `aligner_cloud` on different machines, for example, `aligner_enclave` will never use the `pubcloud_settings` and `aligner_cloud` will never use `enclave_settings`.
@@ -23,13 +22,13 @@ Note that each component has a set of parameters specific to it that you should 
 `` aligner_enclave.py ``
 This component can be used to simulate or actually be run within a trusted enclave cloud component associated with or connected to a public cloud component.
 Its responsibilities include generation of a secure permutation, a sliding hash window of the entire FASTA that is sent to a redis db being run by the public cloud, and a 
-server-type component that receives not exactly-matched reads from the public cloud component, batches them into FASTQ files, and dispatches them to be run by BWA.
+server-type component that receives non-exactly-matched reads from the public cloud component, batches them into FASTQ files, and dispatches them to be run by BWA.
 
 ###### BWA
-If you want to use a pre-existing copy of BWA with `lean-genes`, ensure that the configuration file points to where your BWA copy is installed, unless it is on the system PATH, in which case you could indicate this with the empty string. Otherwise, the `install_dependencies.sh` includes installation of BWA as a subtask of its functionality.
+If you want to use a pre-existing copy of BWA with `lean-genes`, ensure that the configuration file points to where your BWA copy is installed, unless it is on the system PATH, in which case you could indicate this with the empty string. Otherwise, the `install_dependencies.sh` includes installation of BWA as a subtask of its functionality. If you wish to make use of the enhanced BWA capabilities provided w/ `lean-genes` you can apply our modifications from the patchfile + 2 additional src files in the `bwa_patch` folder.
 
 ###### BWA-MEMe
-`lean-genes` makes use of an extension to BWA that we call `BWA-MEMe`. `BWA-MEMe` encrypts output sequences with AES and conceals its output positions using a secure permutation so that new cloud technologies allow the full read-mapping task to take place in the cloud. To make use of this, `lean-genes` applies a patch to BWA that is stored in the `bwa_patch` folder. You can take care of this process automatically by running `install_dependencies.sh`.
+`lean-genes` makes use of two extensions to BWA that we call `BWA-MEMe`. `BWA-MEMe` encrypts output sequences with AES and conceals its output positions using a secure permutation so that new cloud technologies allow the full read-mapping task to take place in the cloud. To make use of this, `lean-genes` applies a patch to BWA that is stored in the `bwa_patch` folder. This process is taken care of automatically by running `install_dependencies.sh`. In addition, our second extension in `BWA-MEMe` includes a command line option for running BWA interactively such that it can dynamically process FASTQ data in batches. This is useful generally, but conceived in this scheme as a performance enhancement given the modifications from the first BWA extension.
 
 ###### Running the enclave on its own machine
 To run `aligner_enclave.py`, simply enter this command into the terminal
@@ -72,12 +71,12 @@ To run it, simply enter this command into the terminal
  `` python3 aligner_cloud.py``
 
 ###### Post-run
-After running the public cloud component, there will be a redis DB file. If you wish to remove it enter the command `` make clean ``. However, it is convenient to keep a copy of this file because it allows you to bypass index generation for a given reference and permutation.
+After running the public cloud component with exact matching enabled, there will be a redis DB file `dump.rdb`. It is convenient to keep a copy of this file because it allows you to bypass index generation for a given reference and permutation.
 
 ##### Client-side Component
 `` aligner_client.py ``
 This component can be used to simulate/be run to represent the client side of the privacy preserving read-mapping scheme.
-Its main responsibilities include processing fastq files into a protobuf message format that can be used to quickly search for exact matches on the public cloud component, then receiving results from the pubcloud/enclave cloud that can be interpreted safely into SAM files.
+Its main responsibilities include processing fastq files into a protobuf message format that can be used to quickly search for exact matches on the public cloud component, then receiving results from the pubcloud/enclave cloud that can be interpreted safely into SAM files. ``aligner_client`` interfaces with a post-processor component built in C to produce its final `lg_out.sam` file.
 
 ###### Running it
 To run it, simply enter this command into the terminal
@@ -87,8 +86,6 @@ To run it, simply enter this command into the terminal
 If you do not wish to run the script interactively, provide the FASTQ of reads you wish to map as a command line argument, i.e.:
  `` python3 aligner_client.py my_fastq.fastq ``
 
-To use the post-processor, compilation command is:
-`` make post_proc ``
 
 ##### ``test_data`` folder
 This folder contains some example FASTQ and FASTA files that were used to verify the functionality of this tool before scaling it up to full chromosomes and genomes, as well as some example SAM results created by running the tool previously in tests, etc. for verification.
@@ -99,6 +96,6 @@ This folder contains some useful scripts that can perform useful functions like 
 #### FAQs 
 1. When running, make sure you check that you have a new enough version of redis
 2. Make sure you have the right version of the protobuf compiler ``protoc``
-3. Make sure you have built the protobuf message format classes (with `make proto`)
+3. Make sure the protobuf message format classes have been built (`reads\_pb2.py` file exists)
 4. Make sure that any firewalls have been configured to work with the ports you assign in the configuration file
 5. Ensure that your cloud resources are large enough to support the genome you want to work with. This scheme is designed to tradeoff cloud space for decreased runtime and increased throughput, so don't expect the scheme, especially the indexing portion, to work well with limited resources.
