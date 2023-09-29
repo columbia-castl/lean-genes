@@ -51,12 +51,8 @@ def trigger_bwa_indexing(bwa_path, fasta):
     print("Begin BWA indexing...") 
     os.system(bwa_path + "bwa index " + fasta + " &")
 
-def init_interactive_bwa():
-        return call_bwa
-
 def batch_queue_manager(fasta):
     global bwa_batch_queue
-    global bwa_id_queue
 
     print("BATCH QUEUE MANAGER INITIALIZING")
     
@@ -67,7 +63,7 @@ def batch_queue_manager(fasta):
     cmd =  [bwa_path + "bwa", "mem", "-i", "-e", "0", fasta, "-", "2>/dev/null/"]
     cmd_str = bwa_path + "bwa " + "mem -i -e 0 " + fasta + " x"
     bash_cmd_str = "/bin/bash -c " + cmd_str + " -- 2>/dev/null"
-    call_bwa = pexpect.spawn(cmd_str, echo=False) 
+    call_bwa = pexpect.spawn(cmd_str, echo=False, timeout=500) 
     call_bwa.expect("<<PMT READ>>")
     
     end_time = time.time()
@@ -80,10 +76,15 @@ def batch_queue_manager(fasta):
 
         while not bwa_batch_queue.empty():
             batch_id = bwa_batch_queue.get()
+
+            start_time = time.time()
             call_bwa.sendline(str(batch_id.num))
             call_bwa.expect("BATCH FINISH")
             stdout_data = call_bwa.before
-            
+            end_time = time.time()
+
+            print("BWA-meme executes in ", end_time - start_time, " seconds")
+
             sam_sender(stdout_data, batch_id)
 
 

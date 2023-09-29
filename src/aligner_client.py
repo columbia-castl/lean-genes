@@ -10,6 +10,8 @@ import array
 import threading
 import numpy as np
 import signal
+import pexpect
+import queue
 
 from aligner_config import global_settings, client_settings, genome_params, leangenes_params, secret_settings
 from Crypto.Random import get_random_bytes
@@ -22,6 +24,7 @@ from multiprocessing import pool
 
 debug = client_settings["debug"]
 result_socket = ""
+
 pmt = []
 ipmt = []
 
@@ -36,6 +39,8 @@ PARSING_STATE = FastqState.READ_LABEL
 cipher_object = ""
 read_string = ""
 read_socket = ""
+
+post_proc_queue = queue.Queue()
 
 client_commands = ['help','get_pmt', 'send_reads', 'stop']
 
@@ -207,9 +212,10 @@ def send_read_wrapper(filename):
         cipherkey = get_random_bytes(32)
   
     if client_settings["interactive_post_proc"]:
-        post_proc = subprocess.Popen(["time", "./post_proc", "-r", str(genome_params["READ_LENGTH"]), "-i"], close_fds=True, stdin=subprocess.PIPE)
-    else:
-        post_proc = None
+        #post_proc = subprocess.Popen(["time", "./post_proc", "-r", str(genome_params["READ_LENGTH"]), "-i"], close_fds=True, stdin=subprocess.PIPE)
+        print("START POST PROC MANAGER")
+        pp_manager = threading.Thread(target=post_proc_manager)
+        pp_manager.start()
 
     #Implement *our* CTR mode on top of this, PyCrypto's encapsulation is super inconvenient
     crypto = AES.new(cipherkey, AES.MODE_ECB) 
@@ -217,7 +223,7 @@ def send_read_wrapper(filename):
     print("* RESULTS THREAD POOL INITIATED *")
     print("*********************************")
     #result_manager = threading.Thread(target=track_reads_received, args=(crypto, filename+".sam",))
-    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam", post_proc)) 
+    result_manager = threading.Thread(target=spawn_results_processes, args=(crypto, filename+".sam",)) 
     result_manager.start()
 
     print("*************************")
@@ -526,8 +532,9 @@ def track_reads_received(crypto, savefile):
     result_pool.close()
     print("Result threads pool shut down successfully")
 
-def spawn_results_processes(crypto, savefile, post_proc):
-    global result_socket, done_with_bwa, done_with_exact
+def spawn_results_processes(crypto, savefile):
+    global result_socket, done_with_bwa, done_with_exact 
+    global post_proc_queue
     result_socket.listen()
 
     batches = 0
@@ -618,10 +625,9 @@ def spawn_results_processes(crypto, savefile, post_proc):
             decrypt_exact_batch(batch_id.num)
         elif len(batch_id.encrypted_seqs):
             if client_settings["interactive_post_proc"]:
-                print("post_proc:", post_proc) 
-                print(bytes(str(batch_id.num) + "\n", 'ascii')) 
-                post_proc.stdin.write(bytes(str(batch_id.num) + "\n", 'ascii'))
-                #print(post_proc.stdout.readlines())
+                #print(bytes(str(batch_id.num) + "\n", 'ascii')) 
+                #post_proc.stdin.write(bytes(str(batch_id.num) + "\n", 'ascii'))
+                post_proc_queue.put(batch_id.num) 
             else: 
                 dispatch_post_proc(batch_id.num)
 
@@ -630,9 +636,8 @@ def spawn_results_processes(crypto, savefile, post_proc):
                 print("<results>: Client done accepting results!")
                 result_socket.close()
                 if client_settings["interactive_post_proc"]:
-                    print("SEND POST_PROC KILL!")
-                    #post_proc.send_signal(signal.SIGTERM)
-                    post_proc.stdin.write(bytes("quit\n", 'ascii')) 
+                    print("TERMINATE POST_PROC!")
+                    post_proc_queue.put("quit") 
                 break
         else:
             if bwa_set and lg_set:
@@ -640,11 +645,10 @@ def spawn_results_processes(crypto, savefile, post_proc):
                     print("<results>: Client done accepting results!")
                     result_socket.close() 
                     if client_settings["interactive_post_proc"]: 
-                        post_proc.send_signal(signal.SIGTERM)
-                        print("SEND POST_PROC KILL!")
+                        print("TERMINATE POST_PROC!")
+                        post_proc_queue.put("quit")
                     break
 
-        os.system("cat lg_stitched.sam_* > lg_out.sam") 
 
 #            pid = os.fork()
 #            if not pid:
@@ -698,8 +702,42 @@ def make_ipmt(write=True):
     return ipmt
 
 def dispatch_post_proc(batch_id):
-    #os.system("time ./post_proc " + str(genome_params["READ_LENGTH"]) + " " +  str(batch_id) + " &")
     subprocess.Popen(["time", "./post_proc", "-r" , str(genome_params["READ_LENGTH"]), "-l" ,str(batch_id)], close_fds=True)
+
+def post_proc_manager():
+    global post_proc_queue
+
+    print("POST PROC MANAGER INITIALIZING")
+
+    start_time = time.time()
+
+    cmd_str = "time ./post_proc -i -r " + str(genome_params["READ_LENGTH"])
+    post_proc = pexpect.spawn(cmd_str, echo=False)
+    post_proc.expect("POST PROC INIT DONE")
+
+    end_time = time.time()
+
+    print("POST PROC MANAGER initialized in ", end_time - start_time, " seconds")
+
+    while True:
+        while post_proc_queue.empty():
+            pass
+
+        while not post_proc_queue.empty():
+            batch_num = post_proc_queue.get()
+
+            start_time = time.time()
+            post_proc.sendline(str(batch_num))
+            if debug:
+                print("Post proc send ", batch_num)
+            if (str(batch_num) == "quit"):
+                os.system("cat lg_stitched.sam_* > lg_out.sam")
+            try:  
+                post_proc.expect("Wait to process next batch.")
+                end_time = time.time()
+                print("Post proc batch time: ", end_time - start_time, " seconds")
+            except:
+                return
 
 def main():
     global result_socket, pmt, ipmt

@@ -46,26 +46,28 @@ def acc_from_sam(sam_name, threshold):
         if diff < threshold:
             correct_reads += 1
         else:
-            print("Outside threshold: ", diff)
+            #print("Outside threshold: ", diff)
+            pass
 
     print("SAM accuracy: ", correct_reads, "/", num_reads)
     print(correct_reads/num_reads * 100, " %")
-
+    print("**************************************")
 
 def main():
     if (len(sys.argv) < 4) or (len(sys.argv) > 5):
         print("Usage: python3 calc_accuracy.py <FQ directory> <BWA path> <BWA ref> <OPT acc threshold>")
         exit()
 
-    fastq_dir = sys.argv[1]
-    fastqs = gather_files(fastq_dir, ["fq", "fastq"])
-    print(fastqs)
+    #fastq_dir = sys.argv[1]
+    #fastqs = gather_files(fastq_dir, ["fq", "fastq"])
+    #print(fastqs)
 
-    bwa_path = sys.argv[2]
-    ref = sys.argv[3]
-    bwa_funnel(fastqs, bwa_path, ref)
+    #bwa_path = sys.argv[2]
+    #ref = sys.argv[3]
+    #bwa_funnel(fastqs, bwa_path, ref)
 
-    sams = gather_files(fastq_dir, ["sam"])
+    #sams = gather_files(fastq_dir, ["sam"])
+    sams = ['100k_150_0.01.sam'] 
     print("SAMs:\n_____")
     print(sams)
   

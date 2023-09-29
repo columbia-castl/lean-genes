@@ -16,7 +16,7 @@ def main():
 
     for error_rate in error_rates:
         for read_size in read_sizes:
-            cmd_str = wgsim_path + "/wgsim -e " + str(error_rate) + " -1 " + str(read_size) + " " + ref + " reads_1M_" + str(error_rate) + "_" + str(read_size) + ".fq /dev/null > /dev/null"
+            cmd_str = wgsim_path + "/wgsim -N 100000 -e " + str(error_rate) + " -1 " + str(read_size) + " " + ref + " reads_100k_" + str(error_rate) + "_" + str(read_size) + ".fq /dev/null > /dev/null"
             print(">>> " + cmd_str)
             os.system(cmd_str)
 

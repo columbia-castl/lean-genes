@@ -253,10 +253,10 @@ int main(int argc, char** argv) {
 	}
 
 	i_pmt = read_pmt(INVERSE);
+	printf("POST PROC INIT DONE\n");
 
 	if (interactive) {
 		while (1) {
-			printf("Wait to process batch.\n");
 			char batch_num[10];
 			scanf("%s", batch_num);
 			
@@ -267,6 +267,8 @@ int main(int argc, char** argv) {
 			init_file_names(files);
 			make_batch_file_names(files, batch_num);
 			run_batch(files, read_size);
+			
+			printf("Wait to process next batch.\n");
 		}	
 	}
 	else {
