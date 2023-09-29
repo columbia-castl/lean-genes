@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 	python3-pip \
 	redis-server 
 
-RUN pip install pycryptodome redis numpy google protobuf
+RUN pip install pycryptodome redis numpy google protobuf pexpect
 
 #Aligner code copy
 COPY aligner_enclave.py bin/aligner_enclave.py
