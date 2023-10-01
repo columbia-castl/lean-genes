@@ -22,6 +22,6 @@ COPY bwa bwa/bwa
 COPY pmt.csv pmt.csv
 
 #Data copy
-COPY chr21.fa data/ref.fa
-#COPY small-150.fastq data/small-150.fastq
-CMD bwa/bwa index data/ref.fa && python3 bin/aligner_enclave.py data/ref.fa
+COPY GRCH38_21.fa* data/
+#CMD bwa/bwa index data/ref.fa && python3 bin/aligner_enclave.py data/ref.fa
+CMD python3 bin/aligner_enclave.py data/GRCH38_21.fa

@@ -251,7 +251,7 @@ index 0a0e3bb..db38478 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..5ce9b08 100644
+index be7ba0e..e11d18d 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,8 @@ int main_mem(int argc, char *argv[])
@@ -316,7 +316,7 @@ index be7ba0e..5ce9b08 100644
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -369,39 +401,95 @@ int main_mem(int argc, char *argv[])
+@@ -369,39 +401,109 @@ int main_mem(int argc, char *argv[])
  			aux.idx->bns->anns[i].is_alt = 0;
  
  	ko = kopen(argv[optind + 1], &fd);
@@ -334,7 +334,6 @@ index be7ba0e..5ce9b08 100644
 -			ko2 = kopen(argv[optind + 2], &fd2);
 -			if (ko2 == 0) {
 -				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 2]);
--				return 1;
 +	int iter_count = 0;
 +	//INTERACTIVE
 +	while (1){
@@ -348,10 +347,7 @@ index be7ba0e..5ce9b08 100644
 +
 +			if (!strcmp(batchfile, "quit")){
 +				break;
- 			}
--			fp2 = gzdopen(fd2, "r");
--			aux.ks2 = kseq_init(fp2);
--			opt->flag |= MEM_F_PE;
++			}
 +
 +			ko = kopen(batchfile, &fd);
 +		}
@@ -360,8 +356,23 @@ index be7ba0e..5ce9b08 100644
 +		}
 +
 +		if (ko == 0) {
-+			if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, batchfile);
-+			return 1;
++			int tries = 0;
++			while (tries < 5) {
++				ko = kopen(batchfile, &fd);
++				if (ko == 0) {
++					tries++;
++				}
++				else {
++					break;
++				}
++			}
++			if (tries == 5) {
++				if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, batchfile);
+ 				return 1;
+ 			}
+-			fp2 = gzdopen(fd2, "r");
+-			aux.ks2 = kseq_init(fp2);
+-			opt->flag |= MEM_F_PE;
 +		}
 +		else {
 +			//printf("GET BATCHFILE: %s\n", batchfile);
@@ -394,9 +405,11 @@ index be7ba0e..5ce9b08 100644
 +		}
 +		else if (is_encrypting){
 +			fclose(opt->encrypt_out);
++			kclose(ko);
 +
 +			//When encrypting AND interactive, automatically increment batch IDs
 +			opt->batch_id++;
++			printf("Looking for batch: %d\n", opt->batch_id);
 +
 +			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
 +			strcpy(filename, ENCRYPT_FILE);

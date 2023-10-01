@@ -120,7 +120,10 @@ def receive_reads(serialized_read_size, crypto, redis_table, cid=16):
                
                 if leangenes_params["nitro_enclaves"]:
                     unmatched_socket = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
-                    unmatched_socket.connect((cid, pubcloud_settings["unmatched_port"]))
+                    try:
+                        unmatched_socket.connect((cid, pubcloud_settings["unmatched_port"]))
+                    except Exception as e:
+                        print("Exception connecting to Nitro Enclave: ", e)
                 else:
                     unmatched_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     unmatched_socket.connect((pubcloud_settings["enclave_ip"], pubcloud_settings["unmatched_port"])) 
@@ -416,6 +419,8 @@ def get_bwa_results(bwa_socket):
             result_socket.close()
 
             conn.close()
+        else:
+            exit()
 
 def send_bwa_results(result_queue, batch_id):
     result_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

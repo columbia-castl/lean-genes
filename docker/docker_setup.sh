@@ -10,7 +10,8 @@ cp ../bwa/bwa .
 cp ../src/pmt.csv .
 
 # COPY REFERENCE TO DOCKER CONTAINER
-cp ../test_data/chr21.fa .
+#cp ../test_data/chr21.fa* .
+cp ../../real_reads/GRCH38_21.fa* .
 
 docker build -t lean_genes:v1 .
 #docker run lean_genes:v1

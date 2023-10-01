@@ -79,8 +79,9 @@ def batch_queue_manager(fasta):
 
             start_time = time.time()
             call_bwa.sendline(str(batch_id.num))
-            call_bwa.expect("BATCH FINISH")
+            call_bwa.expect(r'BATCH FINISH|fail')
             stdout_data = call_bwa.before
+            os.remove(str(batch_id.num))
             end_time = time.time()
 
             print("BWA-meme executes in ", end_time - start_time, " seconds")
@@ -99,11 +100,16 @@ def dispatch_bwa(bwa_path, fasta, fastq, batch_id):
         call_bwa = Popen(["cat"], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     else:
         if enclave_settings["interactive_bwa"]:
-            fq = open(str(batch_id.num), "wb")
-            fq.write(fastq)
-            fq.close()
+            try: 
+                fq = open(str(batch_id.num), "wb")
+                fq.write(fastq)
+                fq.close()
+                print("** WROTE READFILE FOR BATCH ", batch_id.num)
+            except:
+                print("!!!File write error, batch ", batch_id.num)
             
             bwa_batch_queue.put(batch_id)
+            print("&&& ", bwa_batch_queue.qsize() , " is len of BWA batch q")
             stdout_data = None
 
         else:
@@ -205,7 +211,7 @@ def sam_sender(sam_data, batch_id):
     result_counter = 0
     result_bytes = b''
 
-    print(len(sam_lines), " in the SAM")
+    print(len(sam_lines), " in the SAM for batch ", batch_id.num)
 
 #    for line in sam_lines:
 #        if PARSING_STATE == SamState.PROCESSING_HEADER:
@@ -436,14 +442,15 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
         bwa_manager_thread.start() 
 
     while True: 
-        unmatched_socket.listen()
+        unmatched_socket.listen(100)
         conn, addr = unmatched_socket.accept()
 
         #TODO: Real crypto key management
         crypto_key = b'0' * 32
         crypto = AES.new(crypto_key, AES.MODE_ECB)
         unmatched_counter = 0
-
+        
+        print("----------------------------------")
         print("CONNECTION TO PUBCLOUD ESTABLISHED")
 
         size_bytes = conn.recv(1)
@@ -456,14 +463,20 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
         print("Batch ID Type: ", batch_id.type)
 
         while True: 
-            data = conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]) 
-            
+            try: 
+                data = conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]) 
+            except OSError as error:
+                print(error)
+                print("...and it happened in batch", batch_id.num)
+
             if debug:
                 print("-->received unmatched read from cloud")
 
             if not data:
                 break
 
+            print("Collect data for batch ", batch_id.num)
+            print("Remaining datalen: ", (serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]) - len(data))
             while len(data) < (serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]):
                 begin_len = len(data)
                 data += conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"] - len(data))
@@ -476,7 +489,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
                     print("Data now len " + str(len(data)))
 
             unmatched_counter += len(data) / serialized_read_size 
-            print("Reads from cloud: ", unmatched_counter)
+            print("Reads from cloud: ", unmatched_counter, "in BATCH ", batch_id.num)
 
             begin_time = time.time()
             while data:
@@ -519,6 +532,7 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
 def send_back_results(fasta_path, fastq_bytes, num_reads, batch_id):
     #WHERE BWA IS CALLED
     print("<enclave>: --> sending back result batch! [batch size = ", num_reads ,"]")
+    print("------------------------------------------------------------------------")
     if debug: 
         print("FASTQ: ", fastq_bytes)
         print("FASTQ len: ", len(fastq_bytes))

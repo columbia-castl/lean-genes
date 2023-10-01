@@ -11,9 +11,9 @@ client_settings = dict(
     pmt_port = 4445,
     read_port = 4444,
     result_port = 4446,
-    debug = False,
+    interactive_post_proc = True,
     write_ipmt = False,
-    interactive_post_proc = True
+    debug = False
     #results_threads = 11
 )
 
@@ -51,9 +51,9 @@ secret_settings = dict(
 )
 
 leangenes_params = dict(
-    BWA_BATCH_SIZE = 10000, #Length of FASTQs created by enclave
+    BWA_BATCH_SIZE = 1000, #Length of FASTQs created by enclave
     LG_BATCH_SIZE = 10000, #Serialized exact match batches 
-    READ_BATCH_SIZE = 10000, #How many reads client sends at once
+    READ_BATCH_SIZE = 1000, #How many reads client sends at once
     AES_BLOCK_SIZE = 16,
     CRYPTO_MODE = "debug",
     disable_exact_matching = True,
