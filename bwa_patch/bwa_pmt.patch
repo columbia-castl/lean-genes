@@ -220,7 +220,7 @@ index 03e2a05..8aa8199 100644
  			ks_resize(str, str->l + (qe - qb) + 1);
  			for (i = qe-1; i >= qb; --i) str->s[str->l++] = s->qual[i];
 diff --git a/bwamem.h b/bwamem.h
-index 0a0e3bb..db38478 100644
+index 0a0e3bb..1836325 100644
 --- a/bwamem.h
 +++ b/bwamem.h
 @@ -30,10 +30,15 @@
@@ -234,7 +234,7 @@ index 0a0e3bb..db38478 100644
  #define MEM_MAPQ_MAX  60
  
 +#define ENCRYPT_FILE "lg_encrypted.bytes"
-+#define MAX_BATCH_DIGITS 4
++#define MAX_BATCH_DIGITS 9
 +
  struct __smem_i;
  typedef struct __smem_i smem_i;
@@ -251,7 +251,7 @@ index 0a0e3bb..db38478 100644
  
  typedef struct {
 diff --git a/fastmap.c b/fastmap.c
-index be7ba0e..e11d18d 100644
+index be7ba0e..1443827 100644
 --- a/fastmap.c
 +++ b/fastmap.c
 @@ -146,6 +146,8 @@ int main_mem(int argc, char *argv[])
@@ -289,7 +289,7 @@ index be7ba0e..e11d18d 100644
 +				has_batch_id = 1;
 +			}
 +
-+			char* filename = malloc(strlen(ENCRYPT_FILE) + MAX_BATCH_DIGITS + 1);
++			char* filename = malloc(strlen(ENCRYPT_FILE) + 1 + MAX_BATCH_DIGITS + 1);
 +			strcpy(filename, ENCRYPT_FILE);
 +			if (has_batch_id) strcat(filename, "_");
 +
@@ -316,7 +316,7 @@ index be7ba0e..e11d18d 100644
  	if (optind + 1 >= argc || optind + 3 < argc) {
  		fprintf(stderr, "\n");
  		fprintf(stderr, "Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]\n\n");
-@@ -369,39 +401,109 @@ int main_mem(int argc, char *argv[])
+@@ -369,39 +401,112 @@ int main_mem(int argc, char *argv[])
  			aux.idx->bns->anns[i].is_alt = 0;
  
  	ko = kopen(argv[optind + 1], &fd);
@@ -420,6 +420,9 @@ index be7ba0e..e11d18d 100644
 +			strcat(filename, id_string);
 +
 +			opt->encrypt_out = fopen(filename, "wb");
++			if (opt->encrypt_out == NULL) {
++				printf("BWA-MEMe ERROR!! Did not find requested batchfile!\n");
++			}
 +			free(filename);
 +
  		}
