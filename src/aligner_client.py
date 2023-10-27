@@ -732,6 +732,7 @@ def post_proc_manager():
                 print("Post proc send ", batch_num)
             if (str(batch_num) == "quit"):
                 os.system("cat lg_stitched.sam_* > lg_out.sam")
+                os.system("rm lg_stitched* lg_secure_batch* lg_enclave.bytes*")
             try:  
                 post_proc.expect("Wait to process next batch.")
                 end_time = time.time()

@@ -479,7 +479,11 @@ def get_encrypted_reads(unmatched_socket, serialized_read_size, fasta_path):
             print("Remaining datalen: ", (serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]) - len(data))
             while len(data) < (serialized_read_size * leangenes_params["BWA_BATCH_SIZE"]):
                 begin_len = len(data)
-                data += conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"] - len(data))
+                try: 
+                    data += conn.recv(serialized_read_size * leangenes_params["BWA_BATCH_SIZE"] - len(data))
+                except OSError as error:
+                    print(error)
+                    print("...and it happened in batch", batch_id.num)
                 end_len = len(data)
 
                 if (end_len == begin_len) and (end_len % serialized_read_size == 0):
